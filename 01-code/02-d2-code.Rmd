@@ -1,7 +1,7 @@
 ---
 title: "SEM workshop: Day 2 code"
 author: "Constantin Manuel Bosancianu"
-date: "`r format(Sys.time(), '%B %d, %Y | %H:%M:%S | %Z')`"
+date: "September 21, 2021"
 output:
   rmdformats::downcute:
     self_contained: true
@@ -32,19 +32,9 @@ knitr::opts_chunk$set(echo = TRUE,
                       comment = NA,
                       message = FALSE)
 
-check.packages <- function(pkg){
-    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-    if (length(new.pkg))
-        install.packages(new.pkg, dependencies = TRUE,
-                         repos = "https://cran.rstudio.com")
-    sapply(pkg, require, character.only = TRUE)
-}
-
-# The list of packages that should be checked.
-pkg.list <- c("tidyverse","scales","texreg","broom",
-              "kableExtra","lavaan","psych","semPlot",
-              "semTools","haven")
-check.packages(pkg.list)
+library(pacman)
+p_load(tidyverse, scales, texreg, broom, kableExtra,
+       lavaan, psych, semPlot, semTools, haven)
 ```
 
 
@@ -54,17 +44,17 @@ We spoke today about how to assess model fit, and I want us to go back to yester
 To begin with, let's go through the same process of data loading and cleaning--all the steps we performed yesterday up to the point of running the single-factor CFA model we started with.
 
 ```{r fa-read-data}
-anesDF <- read_dta("../02-data/03-ANES-pilot-1987.dta")
+df_anes <- read_dta("../02-data/03-ANES-pilot-1987.dta")
 
 # Also define a small custom cleaning function that will simplify the
 # recoding process downstream.
-spec_rec <- function(x) {
+fun_spec_rec <- function(x) {
   if_else(x %in% c(0,8,9), NA_real_, x)
 }
 ```
 
 ```{r fa-clean-data}
-anesDF <- anesDF %>% 
+df_anes <- df_anes %>% 
   dplyr::select(V875267:V875272, V875216:V875222, V860595, V860596,
                 V860599, V860733, V860738, V860756, V860261, V860301,
                 V860309, V860448) %>% 
@@ -72,7 +62,7 @@ anesDF <- anesDF %>%
                          V860309, V860448),
             .funs = as.numeric) %>% 
   mutate_at(.vars = vars(V875267:V875222),
-            .funs = spec_rec) %>% 
+            .funs = fun_spec_rec) %>% 
   rename(a15a = V875216,
          a15b = V875217,
          a15c = V875218,
@@ -106,27 +96,29 @@ anesDF <- anesDF %>%
          a38b = 6 - a38b,
          a38d = 6 - a38d,
          a38f = 6 - a38f,
-         married = case_when(married==1 ~ 1,
-                             married>=2 ~ 0,
-                             married==9 ~ NA_real_),
-         yrs_educ = if_else(yrs_educ==99, NA_real_, yrs_educ),
-         income_cat = if_else(income_cat==98, NA_real_, income_cat),
-         relig_attn = if_else(relig_attn==9, NA_real_, relig_attn),
+         married = case_when(married == 1 ~ 1,
+                             married >= 2 ~ 0,
+                             married == 9 ~ NA_real_),
+         yrs_educ = if_else(yrs_educ == 99, NA_real_, yrs_educ),
+         income_cat = if_else(income_cat == 98, NA_real_, income_cat),
+         relig_attn = if_else(relig_attn == 9, NA_real_, relig_attn),
          relig_attn = 6 - relig_attn,
-         white = case_when(white==1 ~ 1,
-                           white>=2 ~ 0),
-         voted_86 = if_else(voted_86==5, 0, voted_86),
-         pol_int = if_else(pol_int %in% c(8,9), NA_real_, pol_int),
+         white = case_when(white == 1 ~ 1,
+                           white >= 2 ~ 0),
+         voted_86 = if_else(voted_86 == 5, 0, voted_86),
+         pol_int = if_else(pol_int %in% c(8, 9), NA_real_, pol_int),
          pol_int = 5 - pol_int,
-         contact = case_when(contact==8 ~ NA_real_,
-                             contact==1 ~ 1,
-                             contact==5 ~ 0),
-         increase_spend = if_else(increase_spend %in% c(0,8,9), NA_real_, increase_spend))
+         contact = case_when(contact == 8 ~ NA_real_,
+                             contact == 1 ~ 1,
+                             contact == 5 ~ 0),
+         increase_spend = if_else(increase_spend %in% c(0, 8, 9), NA_real_, increase_spend))
 
 # Select only the needed indicators for the factor analysis
-tempDF <- na.omit(anesDF[ ,c("a38a","a38b","a38c","a38d","a38e",
-                             "a38f","a15a","a15b","a15c","a15d",
-                             "a15e","a15f","a15g")])
+df_temp <- df_anes %>%
+    dplyr::select(a38a, a38b, a38c, a38d, a38e,
+                  a38f, a15a, a15b, a15c, a15d,
+                  a15e, a15f, a15g) %>%
+    na.omit()
 ```
 
 ## Initial model
@@ -136,7 +128,7 @@ Let's focus a bit more on the measures of model fit presented in the output. Fir
 model1 <- ' efficacy =~ a38a + a38b + a38c + a38d + a38e + a38f + a15a + a15b + a15c + a15d + a15e + a15f + a15g '
 
 cfa1.fit <- cfa(model = model1,
-                data = tempDF,
+                data = df_temp,
                 ordered = TRUE,
                 std.lv = TRUE)
 summary(cfa1.fit, fit.measures = TRUE)
@@ -156,7 +148,7 @@ model2 <- ' internal =~ a38a + a38b + a38c + a38d + a38e + a38f
             external =~ a15a + a15b + a15c + a15d + a15e + a15f + a15g '
 
 cfa2.fit <- cfa(model = model2,
-                data = tempDF,
+                data = df_temp,
                 ordered = TRUE,
                 std.lv = TRUE)
 summary(cfa2.fit, fit.measures = TRUE)
@@ -184,11 +176,11 @@ To demonstrate this here I'll have to re-estimate the models while pretending th
 
 ```{r cfa-compare-models-2, cache=TRUE}
 cfa1.fit <- cfa(model = model1,
-                data = tempDF,
+                data = df_temp,
                 std.lv = TRUE)
 
 cfa2.fit <- cfa(model = model2,
-                data = tempDF,
+                data = df_temp,
                 std.lv = TRUE)
 
 AIC(cfa1.fit)
@@ -221,9 +213,9 @@ The data is sourced from @bollen_structural_1989, and refers to indicators of po
 Bollen's initial exploration was to check whether economic development in 1960 predicts democratic level in 1965, even after accounting for level of democracy in 1960. The measurement part uses these two sets of indicators presented above to measure level of democracy and level of economic development.
 
 ```{r sr-read-data, results='asis'}
-demoDF <- OpenMx::Bollen
+df_demo <- OpenMx::Bollen
 
-head(demoDF, 10) %>% 
+head(df_demo, 10) %>% 
   kable(digits = 3,
         row.names = FALSE,
         caption = "Structure of Bollen's Political Democracy data set") %>% 
@@ -244,7 +236,7 @@ model.1 <- '# measurement model
             demo60 ~~ demo65 '
 
 fit.1 <- sem(model.1, 
-             data = demoDF,
+             data = df_demo,
              std.lv = TRUE)
 summary(fit.1, fit.measures = TRUE)
 ```
@@ -275,7 +267,7 @@ model.2 <- '# measurement model
             y4 ~~ y8 '
 
 fit.2 <- sem(model.2, 
-             data = demoDF,
+             data = df_demo,
              std.lv = TRUE)
 summary(fit.2, fit.measures = TRUE)
 ```
@@ -316,7 +308,7 @@ model.3 <- '# measurement model
             y6 ~~ y8 '
 
 fit.3 <- sem(model.3, 
-             data = demoDF,
+             data = df_demo,
              std.lv = TRUE)
 summary(fit.3, fit.measures = TRUE)
 anova(fit.2, fit.3)
@@ -342,7 +334,7 @@ model.3 <- '# measurement model
             y4 ~~ y8 '
 
 fit.3 <- sem(model.3, 
-             data = demoDF,
+             data = df_demo,
              std.lv = TRUE)
 summary(fit.3, fit.measures = TRUE)
 ```
@@ -371,7 +363,7 @@ model.3 <- '# measurement model
             tot := c + a*b '
 
 fit.3 <- sem(model.3, 
-             data = demoDF,
+             data = df_demo,
              std.lv = TRUE)
 summary(fit.3, fit.measures = TRUE)
 ```
@@ -382,18 +374,25 @@ Finally, we can get a decent-looking plot with the same `semPaths()` function we
 
 ```{r sr-graph, fig.height=12, fig.width=12}
 semPaths(fit.3, what = "est",
-         edge.label.cex=0.9,
+         edge.label.cex = 0.9,
          edge.color = "black",
          layout = "tree")
 ```
 
 # Data for practice
-Using smaller data sets definitely speeds up things in the lab, but it also doesn't convey some of the challenges encountered when working with more commonly-used data sources.^[Though it's worth keeping in mind that none of the data sets presented so far have been simulated. All are data sources collected at some point for research purposes.] Because of this, I've also supplied on the Moodle page for the class, a data set where you can try a simple structural regression model.
+Using smaller data sets definitely speeds up things in the lab, but it also doesn't convey some of the challenges encountered when working with more commonly-used data sources.^[Though it's worth keeping in mind that none of the data sets presented so far have been simulated. All are data sources collected at some point for research purposes.] Because of this, I've also uploaded in the `02-data` subfolder, a data set where you can try a simple structural regression model.
 
 The data comes from round 7 of the *World Values Surveys*, and includes information on a few psychological orientations, as well as socio-demographics and a few political attitudes. If you want to, you could easily try to set up a measurement model for Left--Right ideological placement, and see how education, age, and participation in protest activities relate to this latent trait. This is just a suggestion, of course; if it doesn't suit you, there are a few other latent traits that can be investigated with this data.
 
-The codebook for the data has also been uploaded on Moodle. Enjoy!
+The codebook for the data has also been uploaded; you can find it in the `05-docs` subfolder. Enjoy!
 
+# Package versions
+
+Package versions used in this script.
+
+```{r package-versions}
+sessionInfo()
+```
 
 # References
 <div id="refs"></div>

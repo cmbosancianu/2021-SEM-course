@@ -92,18 +92,9 @@ knitr::opts_chunk$set(echo = FALSE,
                       comment = NA,
                       eval = TRUE)
 
-check.packages <- function(pkg){
-  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-  if (length(new.pkg))
-    install.packages(new.pkg, dependencies = TRUE,
-                     repos = "https://cran.rstudio.com")
-  sapply(pkg, require, character.only = TRUE)
-}
-
-pkgList <- c("tidyverse","scales","texreg","broom",
-             "arm","kableExtra","lavaan","psych","semPlot",
-             "semTools","readstata13")
-check.packages(pkgList)
+library(pacman)
+p_load(tidyverse, scales, texreg, broom, arm, kableExtra,
+       lavaan, psych, semPlot, semTools, readstata13)
 
 # Logical switch for generating output
 generateFigs <- FALSE
@@ -344,9 +335,12 @@ rothLower.cor <- '
                   -.05 -.23 -.13 1.00
                   -.08 -.16 -.29  .34 1.00 '
 # name the variables and convert to full correlation matrix
-rothFull.cor <- getCov(rothLower.cor, names = c("exercise","hardy","fitness","stress","illness"))
+rothFull.cor <- getCov(rothLower.cor,
+                       names = c("exercise", "hardy", "fitness", "stress",
+                                 "illness"))
 # add the standard deviations and convert to covariances
-rothFull.cov <- cor2cov(rho = rothFull.cor, sigma = c(66.50,38.00,18.40,33.50,62.48))
+rothFull.cov <- cor2cov(rho = rothFull.cor,
+                        sigma = c(66.50, 38.00, 18.40, 33.50, 62.48))
 @ 
 
 \begin{table}[ht]

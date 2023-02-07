@@ -90,18 +90,9 @@ knitr::opts_chunk$set(echo = FALSE,
                       comment = NA,
                       eval = TRUE)
 
-check.packages <- function(pkg){
-  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-  if (length(new.pkg))
-    install.packages(new.pkg, dependencies = TRUE,
-                     repos = "https://cran.rstudio.com")
-  sapply(pkg, require, character.only = TRUE)
-}
-
-pkgList <- c("tidyverse","scales","texreg","broom",
-             "arm","kableExtra","lavaan","psych","semPlot",
-             "semTools","readstata13")
-check.packages(pkgList)
+library(pacman)
+p_load(tidyverse, scales, texreg, broom, arm, kableExtra,
+       lavaan, psych, semPlot, semTools, readstata13)
 
 # Logical switch for generating output
 generateFigs <- FALSE
@@ -665,15 +656,15 @@ EFA does not require the estimation of factor covariances, though it is possible
   \end{itemize}
 
 <<factor-analysis-1, echo=FALSE>>=
-anesDF <- readRDS("../02-data/04-practice-data-ANES.rds")
+df_anes <- readRDS("../02-data/04-practice-data-ANES.rds")
 @
 
 <<factor-analysis-2, eval=FALSE>>=
-faDF <- anesDF %>%
+df_fa <- df_anes %>%
   na.omit()
 
 # Create the covariance matrix between items
-round(cov(faDF), digits = 2)
+round(cov(df_fa), digits = 2)
 @
 
 \end{frame}
@@ -712,7 +703,7 @@ a15g &  0.14 & 0.07 & 0.27 & -0.04 & 0.18 & 0.13 & 0.24 & 0.37 & 0.22 & 0.40 & 0
   \frametitle{EFA: Factor loadings}
 
 <<factor-analysis-3, eval=FALSE>>=
-f1 <- fa(r = faDF,
+f1 <- fa(r = df_fa,
          nfactors = 5,
          rotate = "oblimin")
 @
@@ -794,7 +785,7 @@ f2 <- 'internal =~ a38a + a38b + a38c + a38d + a38e + a38f
        external =~ a15a + a15b + a15c + a15d + a15e + a15f + a15g'
 
 f2.fit <- cfa(model = f2,
-              data = faDF,
+              data = df_fa,
               ordered = TRUE,
               std.lv = TRUE)
 
@@ -831,7 +822,7 @@ dev.off()
 f1 <- 'eff =~ a38a + a38b + a38c + a38d + a38e + a38f + a15a + a15b + a15c + a15d + a15e + a15f + a15g'
 
 f1.fit <- cfa(model = f1,
-              data = faDF,
+              data = df_fa,
               ordered = TRUE,
               std.lv = TRUE)
 summary(compareFit(f2.fit, f1.fit))
@@ -1241,9 +1232,9 @@ How much of the effect of the program on depression is \textit{transmitted} thro
   \pause
 
 <<r read-data>>=
-jobsDF <- read.dta13(file = "../02-data/05-Jobs-NoMiss-Cont.dta",
-                     convert.factors = FALSE)
-jobsDF <- jobsDF %>%
+df_jobs <- read.dta13(file = "../02-data/05-Jobs-NoMiss-Cont.dta",
+                      convert.factors = FALSE)
+df_jobs <- df_jobs %>%
   mutate(educ = as.factor(educ),
          sex = as.factor(sex),
          nonwhite = as.factor(nonwhite),
@@ -1277,7 +1268,7 @@ model <- ' # direct effect
            # total effect
              total := c + (a*b)'
 
-fit <- sem(model, data = jobsDF)
+fit <- sem(model, data = df_jobs)
 summary(fit)
 @
 

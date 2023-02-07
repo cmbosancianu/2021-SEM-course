@@ -1,7 +1,7 @@
 ---
 title: "SEM workshop: Day 3 code"
 author: "Constantin Manuel Bosancianu"
-date: "`r format(Sys.time(), '%B %d, %Y | %H:%M:%S | %Z')`"
+date: "September 22, 2021"
 output:
   rmdformats::downcute:
     self_contained: true
@@ -31,19 +31,9 @@ knitr::opts_chunk$set(echo = TRUE,
                       comment = NA,
                       message = FALSE)
 
-check.packages <- function(pkg){
-    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-    if (length(new.pkg))
-        install.packages(new.pkg, dependencies = TRUE,
-                         repos = "https://cran.rstudio.com")
-    sapply(pkg, require, character.only = TRUE)
-}
-
-# The list of packages that should be checked.
-pkg.list <- c("tidyverse","scales","texreg","broom",
-              "kableExtra","lavaan","psych","semPlot",
-              "semTools","haven")
-check.packages(pkg.list)
+library(pacman)
+p_load(tidyverse, scales, texreg, broom, kableExtra, lavaan,
+       psych, semPlot, semTools, haven)
 ```
 
 
@@ -51,12 +41,12 @@ check.packages(pkg.list)
 
 We start with an example of how to run a path model in a multilevel setting. Our demonstration data comes from wave 4 of the *World Values Surveys*, where we're trying to better understand the drivers of variation in citizens' self-expression values (this is an indicator that comes pre-calculated in the WVS data). Though seemingly unimportant, this indicator holds a key role in a theoretical account that sees development impacting democracy by means of the self-expression values that economic prosperity brings about in the population [@inglehart_how_2009]. The question at hand is: who are the individuals who are more likely to espouse such self-expression values?
 
-An odd feature of the data you have on Moodle is that it comes without variable names, so before we can use it we have to assign names to the columns.^[The reason for this is that the data was also used for **Mplus**, and this software only accepts data files that do not contain variable names.]
+An odd feature of the data you can find in the `02-data` subfolder is that it comes without variable names, so before we can use it we have to assign names to the columns.^[The reason for this is that the data was also used for **Mplus**, and this software only accepts data files that do not contain variable names.]
 
 ```{r mpm-read-data}
-wvsDF <- read_csv(file = "../02-data/07-WVS-wave4.csv",
-                  col_names = FALSE)
-wvsDF <- wvsDF %>% 
+df_wvs <- read_csv(file = "../02-data/07-WVS-wave4.csv",
+                   col_names = FALSE)
+df_wvs <- df_wvs %>% 
   rename(country = 1,
          year = 2,
          sev = 3,
@@ -81,8 +71,8 @@ Here is a small codebook for the data:
 There is not much to clean on the data, but I will do a small transformation on GDP per capita by taking the logarithm of the value expressed back in USD.
 
 ```{r mpm-clean-data}
-wvsDF <- wvsDF %>% 
-  mutate(gdp_log = log(gdp*1000)) %>% 
+df_wvs <- df_wvs %>% 
+  mutate(gdp_log = log(gdp * 1000)) %>% 
   dplyr::select(-gdp)
 ```
 
@@ -90,7 +80,7 @@ wvsDF <- wvsDF %>%
 It would be easy to estimate the same kind of path model we tried during our first session on Monday.
 
 ```{r path-ignore-clustering, cache=TRUE}
-tempDF <- wvsDF %>% 
+df_temp <- df_wvs %>% 
   dplyr::select(country, sev, inc, edu, age) %>% 
   na.omit()
 
@@ -100,7 +90,7 @@ model1 <- ' # regressions
             inc ~ edu'
 
 path1.fit <- sem(model = model1,
-                 data = tempDF)
+                 data = df_temp)
 summary(path1.fit, fit.measures = TRUE)
 ```
 
@@ -110,7 +100,7 @@ Notice that this is a **over-identified** model, since there is 1 degree of free
 # Unfortunately, plotting the residual variances as well skewed the color
 # scale so much that a few of the arrows were no longer visible.
 semPaths(path1.fit, what = "est",
-         edge.label.cex=0.9,
+         edge.label.cex = 0.9,
          layout = "circle",
          edge.color = "black",
          residuals = FALSE)
@@ -122,7 +112,7 @@ Nevertheless, the way we've estimated the model so far completely ignores the fa
 But what would happen if we adequately took this clustering into account, by running this specification as a multilevel path model? In addition to the statistical benefits (getting more precise estimates of the SEs), we can also test a whole new class of propositions, e.g. does GDP have an effect on self-expression values, even after controlling for its Level-1 determinants?
 
 ```{r mpm-clustering, cache=TRUE}
-tempDF <- wvsDF %>% 
+df_temp <- df_wvs %>%
   dplyr::select(country, sev, inc, edu, age, gdp_log) %>% 
   na.omit()
 
@@ -141,7 +131,7 @@ model2 <- '# regressions
            clm := zm * my '
 
 path2.fit <- sem(model2, 
-                 data = tempDF, 
+                 data = df_temp, 
                  cluster = "country")
 summary(path2.fit, fit.measures = TRUE)
 ```
@@ -172,15 +162,15 @@ The data used in this section comes from the 2015 wave of the PISA study (Progra
 We focus more intensely here on students' Internet use, which in this case can be either for educational or recreational purposes. In addition to testing this simple dimensionality, we might also care to know whether there are differences in Internet use across the schools and whether the type of usage (educational vs. entertainment) varies across schools as well. To investigate this we use here 6 indicators collected via the student survey, and which deal with the frequency of use of electronic devices and of Internet outside of the school. All are measured on 5-point scales which vary from *never or hardly ever* all the way to *every day*, which I treat here as continuous given that the example is for demonstration purposes.
 
 ```{r mfa-read-data, results='asis'}
-pisaDF <- read_csv(file = "../02-data/08-PISA-DomRep.csv",
-                   col_names = FALSE)
+df_pisa <- read_csv(file = "../02-data/08-PISA-DomRep.csv",
+                    col_names = FALSE)
 # Create a small custom function for recoding
-rec999 <- function(x) {
-  x[x==-999] <- NA_real_
+fun_rec999 <- function(x) {
+  x[x == -999] <- NA_real_
   x
 }
 
-pisaDF <- pisaDF %>% 
+df_pisa <- df_pisa %>% 
   rename(schoolid = 1,
          vid = 2,
          dl1 = 3,
@@ -189,13 +179,13 @@ pisaDF <- pisaDF %>%
          ils = 6,
          hwk = 7) %>% 
   mutate_at(.vars = vars(vid:hwk),
-            .funs = rec999)
+            .funs = fun_rec999)
 ```
 
 As with the previous example, I first have ho assign variable names to the data set, as these were not found in the data. Because -999 was used as an indicator for missing data, I also had to recode this to missing first. We end up with a data set that has a pretty familiar structure.
 
 ```{r mfa-show-data, results='asis'}
-pisaDF %>% 
+df_pisa %>%
   slice(1:15) %>% 
   kable(caption = "First 15 rows of data",
         row.names = FALSE) %>% 
@@ -229,7 +219,7 @@ A model might fit the data reasonably well and yet still not produce correct sta
 Let's start by being agnostic about the dimensionality of the concept, as we possibly would in a new research project where we don't have a strong body of theory to guide us in choosing the appropriate number of dimensions.
 
 ```{r mfa-multilevel-1-factor, cache=TRUE}
-pisaDF <- pisaDF %>% 
+df_pisa <- df_pisa %>% 
   na.omit()
 
 model1 <- '
@@ -240,7 +230,7 @@ model1 <- '
              internet =~ vid + dl1 + dl2 + isc + ils + hwk '
 
 fit1 <- sem(model1, 
-            data = pisaDF, 
+            data = df_pisa, 
             cluster = "schoolid", 
             estimator = "MLR", 
             std.lv = TRUE)
@@ -265,7 +255,7 @@ model2 <- '
              schb =~ isc + ils + hwk '
 
 fit2 <- sem(model2, 
-            data = pisaDF, 
+            data = df_pisa, 
             cluster = "schoolid", 
             estimator = "MLR",
             std.lv = TRUE)
@@ -294,7 +284,7 @@ model3 <- '
              funschb =~ vid + dl1 + dl2 + isc + ils + hwk '
 
 fit3 <- sem(model3, 
-            data = pisaDF, 
+            data = df_pisa, 
             cluster = "schoolid", 
             estimator = "MLR",
             std.lv = TRUE)
@@ -303,6 +293,14 @@ summary(fit3,
 ```
 
 What could be the interpretation for this? One way of looking at it is that for students we can differentiate between usage for devices for fun or for work. However, between schools we can't: schools where use for fun is high also tend to be places where use for work is high. Conversely, schools where there's low use of digital devices for work also see low use for fun. The most likely reason for this is sorting based on wealth (although in order to test this we would have to employ a full multilevel structural regression model!). Schools in wealthier areas get students who use more digital devices for all purposes, compared to poorer schools, which see low use across the board (fun *and* work).
+
+# Package versions
+
+Package versions used in this script.
+
+```{r package-versions}
+sessionInfo()
+```
 
 # References
 <div id="refs"></div>

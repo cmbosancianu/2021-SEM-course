@@ -1,7 +1,7 @@
 ---
 title: "SEM workshop: Day 1 code"
 author: "Constantin Manuel Bosancianu"
-date: "`r format(Sys.time(), '%B %d, %Y | %H:%M:%S | %Z')`"
+date: "September 20, 2021"
 output:
   rmdformats::downcute:
     self_contained: true
@@ -33,7 +33,7 @@ All scripts assume that you are in the directory where the code file is placed: 
 
 If you have this folder structure in place, the code file should work from beginning to end without an error.^[Naturally, you can also create additional folders, like `04-slides`, or `05-output`, for your personal use.] If you don't, then please manually modify the file paths in the R code below when you get to a section where data is being loaded into memory, or graphs and output are exported on the hard drive.
 
-## Crutches
+## Helpers
 Though I'll try to explain every line of code as we go along, in case I don't and something isn't clear after the session, do make use of a few helpful functions:
 
 * `help()`: brings up the help files for a specific function, which contain useful descriptions of the arguments to the function
@@ -47,7 +47,7 @@ If you're running into trouble with these functions, please check chapters 5 and
 
 
 # Loading packages
-In this part of the code file I simply load the packages we're going to use today. The `check.packages()` function is a custom one. It checks whether packages from the list provided below in the `pkg.list` vector are installed. If they are, it simply loads them; if they are not, it first installs them and then loads them.
+In this part of the code file I simply load the packages we're going to use today. The `p_load()` function from the **pacman** package checks whether packages from the list provided are installed. If they are, it simply loads them; if they are not, it first installs them, and then loads them.
 
 ```{r setup-packages, warning=FALSE, message=FALSE, comment=NA, results='hide'}
 knitr::opts_chunk$set(echo = TRUE,
@@ -56,19 +56,9 @@ knitr::opts_chunk$set(echo = TRUE,
                       comment = NA,
                       message = FALSE)
 
-check.packages <- function(pkg){
-    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-    if (length(new.pkg))
-        install.packages(new.pkg, dependencies = TRUE,
-                         repos = "https://cran.rstudio.com")
-    sapply(pkg, require, character.only = TRUE)
-}
-
-# The list of packages that should be checked.
-pkg.list <- c("tidyverse","scales","texreg","broom",
-             "kableExtra","lavaan","psych","semPlot",
-             "semTools","haven")
-check.packages(pkg.list)
+library(pacman)
+p_load(tidyverse, scales, texreg, broom, kableExtra, lavaan,
+       psych, semPlot, semTools, haven)
 ```
 
 You will see that this is quite an extensive list of packages; worse yet, they have a good number of dependent packages that also require installation. This might take some time to install, particularly if you're doing this while also connected to a Zoom video talk, so I would suggest that you run this entire code chunk and let it run while I make a few introductory remarks about the data we'll use today.
@@ -98,11 +88,11 @@ The goal is to use these statements in a standard EFA/CFA analysis, and then to 
 We start with reading in the data from the ANES 1987 Pilot Study, and with some simple cleaning of the variables we intend to use in the analysis.
 
 ```{r fa-read-data}
-anesDF <- read_dta("../02-data/03-ANES-pilot-1987.dta")
+df_anes <- read_dta("../02-data/03-ANES-pilot-1987.dta")
 
 # Also define a small custom cleaning function that will simplify the
 # recoding process downstream.
-spec_rec <- function(x) {
+fun_spec_rec <- function(x) {
   if_else(x %in% c(0,8,9), NA_real_, x)
 }
 ```
@@ -110,7 +100,7 @@ spec_rec <- function(x) {
 Below you can see a pretty long pipe sequence, but it does all the recoding we'll need in this section. One important thing to point out is how I've renamed all the 13 indicator with shorter names, to make the **lavaan** syntax easier to read. I've also inverted the measurement scales for a few of these indicators (`V875216`, `V875218`, `V875219`, `V875267`, `V875268`, `V875270`, `V875272`). This is because I wanted to ensure that high values on all these indicators denote a higher level of self-perceived efficacy.
 
 ```{r fa-clean-data}
-anesDF <- anesDF %>% 
+df_anes <- df_anes %>% 
   dplyr::select(V875267:V875272, V875216:V875222, V860595, V860596,
                 V860599, V860733, V860738, V860756, V860261, V860301,
                 V860309, V860448) %>% 
@@ -118,7 +108,7 @@ anesDF <- anesDF %>%
                          V860309, V860448),
             .funs = as.numeric) %>% 
   mutate_at(.vars = vars(V875267:V875222),
-            .funs = spec_rec) %>% 
+            .funs = fun_spec_rec) %>% 
   rename(a15a = V875216,
          a15b = V875217,
          a15c = V875218,
@@ -178,11 +168,13 @@ We start with a single-factor model; we might call this factor..."political effi
 We would typically start the analysis with a look at the correlation matrix, produced here with Spearman's $\rho$. The listwise deletion procedure does lead to some data loss, but there's not much we can do about this right now.
 
 ```{r cfa-correlation-matrix, results="asis"}
-tempDF <- na.omit(anesDF[ ,c("a38a","a38b","a38c","a38d","a38e",
-                             "a38f","a15a","a15b","a15c","a15d",
-                             "a15e","a15f","a15g")])
+df_temp <- df_anes %>%
+    dplyr::select(a38a, a38b, a38c, a38d, a38e,
+                  a38f, a15a, a15b, a15c, a15d,
+                  a15e, a15f, a15g) %>%
+    na.omit()
 
-round(cor(tempDF,
+round(cor(df_temp,
           use = "everything",
           method = "spearman"),
       digits = 2) %>%
@@ -197,7 +189,7 @@ Though a bit faint, notice the patterns of correlations in the data, particularl
 model1 <- ' efficacy =~ a38a + a38b + a38c + a38d + a38e + a38f + a15a + a15b + a15c + a15d + a15e + a15f + a15g '
 
 cfa1.fit <- cfa(model = model1,
-                data = tempDF,
+                data = df_temp,
                 ordered = TRUE,
                 std.lv = TRUE)
 ```
@@ -227,7 +219,7 @@ model2 <- ' internal =~ a38a + a38b + a38c + a38d + a38e + a38f
             external =~ a15a + a15b + a15c + a15d + a15e + a15f + a15g '
 
 cfa2.fit <- cfa(model = model2,
-                data = tempDF,
+                data = df_temp,
                 ordered = TRUE,
                 std.lv = TRUE)
 ```
@@ -242,7 +234,7 @@ You can notice a few things here. First, that the **A15a** indicator doesn't rea
 
 We will only cover this tomorrow, but for now please trust me that there is good evidence from model fit statistics that the 2-factor solution fits the data better than a single-factor one.
 
-Remember that the standardized factor loadings convey valuable information: their squared values represent the proportion of explained variance in the indicator (by the latent factor). If you want to see the unstandardized ones as well, just set `std.lv=FALSE` in the `cfa()` function, and run the estimation again.
+Remember that the standardized factor loadings convey valuable information: their squared values represent the proportion of explained variance in the indicator (by the latent factor). If you want to see the unstandardized ones as well, just set `std.lv = FALSE` in the `cfa()` function, and run the estimation again.
 
 In a paper you might want to present a table with estimates for factor loadings and error variances both in standardized and unstandardized format.
 
@@ -264,7 +256,7 @@ model2alt <- ' internal =~ a38a + a38b + a38c + a38d + a38e + a38f
                external =~ a38d + a15a + a15b + a15c + a15d + a15e + a15f + a15g '
 
 cfa3.fit <- cfa(model = model2alt,
-                data = tempDF,
+                data = df_temp,
                 ordered = TRUE,
                 std.lv = TRUE)
 ```
@@ -292,7 +284,7 @@ model.1 <- 'efa("efa")*f1 +
 efa("efa")*f2 =~ a38a + a38b + a38c + a38d + a38e + a38f +a38d + a15a + a15b + a15c + a15d + a15e + a15f + a15g '
 
 cfa1.fit <- cfa(model = model.1,
-                data = tempDF,
+                data = df_temp,
                 ordered = TRUE,
                 std.lv = TRUE)
 
@@ -311,8 +303,8 @@ Individuals were surveyed at the moment of recruitment into the study but before
 I would like to start with a simple model, which will let us focus on the issue of direct and indirect effects. After getting familiar with this model we'll expand it a bit to provide a better estimate of the impact of the seminars.
 
 ```{r pm-read-data}
-jobsDF <- read_dta("../02-data/05-Jobs-NoMiss-Cont.dta")
-str(jobsDF)
+df_jobs <- read_dta("../02-data/05-Jobs-NoMiss-Cont.dta")
+str(df_jobs)
 ```
 
 You can easily see a few key features of the data. The outcome we're interested in is called `depress2`, which is participants' depression score at time T3. The presumed mediator variable is called `mastery`, and it refers to one's sense of control over their environment at T2. The indicator for whether a participant was assigned to the treatment or the control group is found in the data as `treat_num`. The simplest path model we can construct has just these 3 observed measures, with `treat_num` being the only exogenous variable in the model.
@@ -322,7 +314,7 @@ You can easily see a few key features of the data. The outcome we're interested 
 model.1 <- ' mastery ~ treat_num
              depress2 ~ treat_num + mastery '
 
-fit.1 <- sem(model.1, data = jobsDF)
+fit.1 <- sem(model.1, data = df_jobs)
 ```
 
 Notice a few things about the syntax we use now in **lavaan**. Since all variables are now observed, we no longer need to make use of the `=~` designation. Instead, all equations look like standard R syntax for a regression specification. We also don't need to designate specific variables as exogenous, or tell **lavaan** which is the mediator variable. The package can figure this out easily from the way we wrote the equations. The estimation is handled this time through the `sem()` function in the **lavaan** package.
@@ -337,7 +329,7 @@ Though we'll only discuss this in depth tomorrow, we also see that a model fit s
 
 ```{r pm-simple-model-plot, fig.height=6, fig.width=9}
 semPaths(fit.1, what = "est",
-         edge.label.cex=0.9,
+         edge.label.cex = 0.9,
          edge.color = "black",
          rotation = 2)
 ```
@@ -349,14 +341,14 @@ Even though participation in the workshop was randomized, one's sense of mastery
 
 ```{r pm-larger-model-1}
 # A bit of recoding beforehand
-jobsDF <- jobsDF %>% 
+df_jobs <- df_jobs %>% 
   mutate(educ = zap_labels(educ),
-         hs = if_else(educ<=2, 1, 0))
+         hs = if_else(educ <= 2, 1, 0))
 
 model.2 <- ' mastery ~ treat_num + econ_hard + sex + age + nonwhite + hs
              depress2 ~ treat_num + mastery + econ_hard + sex + age + nonwhite + hs '
 
-fit.2 <- sem(model.2, data = jobsDF)
+fit.2 <- sem(model.2, data = df_jobs)
 ```
 
 Yet again we see the same dynamic at play as in the simple model: attending the workshop increases a person's sense of mastery of their surroundings. That, in turn reduces the level of depression they are likely to experience 6 months after the workshop. We can also quickly see why there was a need to control for the impact of covariates: those with at most a high school degree exhibit, on average, a lower level of mastery, as well as a lower level of depression. Not controlling for this factor would have induced an association between mastery and depression even if none existed in reality. Adding the covariates also reduced the unexplained variance in both sense of mastery and depression compared to the simpler model.
@@ -378,7 +370,7 @@ model.2 <- ' mastery ~ a*treat_num + econ_hard + sex + age + nonwhite + hs
            # total effect
              total := c + (a*b) '
 
-fit.2 <- sem(model.2, data = jobsDF)
+fit.2 <- sem(model.2, data = df_jobs)
 summary(fit.2)
 ```
 
@@ -397,7 +389,7 @@ model.ex <- ' econ_hard ~ a*nonwhite + sex + age + hs
             # total effect
               total := c + (a*b) '
 
-fit.ex <- sem(model.ex, data = jobsDF)
+fit.ex <- sem(model.ex, data = df_jobs)
 summary(fit.ex)
 ```
 
@@ -416,7 +408,7 @@ model.3 <- ' mastery ~ a1*treat_num
            # total effect of participation
              total := c + (a1*b1) + (a2*b2) '
 
-fit.3 <- sem(model.3, data = jobsDF)
+fit.3 <- sem(model.3, data = df_jobs)
 summary(fit.3)
 ```
 
@@ -429,9 +421,17 @@ We also see that both our indirect effects are statistically significant:
 
 ```{r pm-multiple-pathways-plot, fig.height=12, fig.width=24}
 semPaths(fit.3, what = "est",
-         edge.label.cex=0.9,
+         edge.label.cex = 0.9,
          edge.color = "black",
          layout = "spring")
+```
+
+# Package versions
+
+Package versions used in this script.
+
+```{r package-versions}
+sessionInfo()
 ```
 
 # References

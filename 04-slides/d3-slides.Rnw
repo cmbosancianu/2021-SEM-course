@@ -104,18 +104,9 @@ knitr::opts_chunk$set(echo = FALSE,
                       comment = NA,
                       eval = TRUE)
 
-check.packages <- function(pkg){
-  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
-  if (length(new.pkg))
-    install.packages(new.pkg, dependencies = TRUE,
-                     repos = "https://cran.rstudio.com")
-  sapply(pkg, require, character.only = TRUE)
-}
-
-pkgList <- c("tidyverse","scales","texreg","broom",
-             "arm","kableExtra","lavaan","psych","semPlot",
-             "semTools","readstata13")
-check.packages(pkgList)
+library(pacman)
+p_load(tidyverse, scales, texreg, broom, arm, kableExtra, lavaan,
+       psych, semPlot, semTools, readstata13)
 
 # Logical switch for generating output
 generateFigs <- FALSE
