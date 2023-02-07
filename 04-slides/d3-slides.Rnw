@@ -1,0 +1,646 @@
+\documentclass[12pt,english,pdf,xcolor=dvipsnames,aspectratio=169]{beamer}
+\usetheme{default}
+\beamertemplatenavigationsymbolsempty
+\definecolor{fore}{RGB}{51,51,51}
+\definecolor{back}{RGB}{255,255,255}
+\definecolor{title}{RGB}{255,0,90}
+\setbeamercolor{titlelike}{fg=title}
+\setbeamercolor{normal text}{fg=fore,bg=back}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{multirow}
+\usepackage{mathpazo}
+\usepackage{inputenc}
+\usepackage{parskip}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+\usepackage{hyperref}
+\hypersetup{pdfauthor={Constantin Manuel Bosancianu},
+pdftitle={Structural Equation Modeling},
+pdfsubject={Day 3: Multilevel Structural Equation Modeling},
+pdfkeywords={Bamberg, workshop, SES, slides, 2021}}
+\usepackage{babel}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.10}
+\usepgfplotslibrary{fillbetween}
+% Defines a checkmark
+\def\checkmark{\tikz\fill[scale=0.4,color=title](0,.35) -- (.25,0) -- (1,.7) -- (.25,.15) -- cycle;}
+\setbeamertemplate{itemize items}{\checkmark}
+% For table captions in Beamer
+\usepackage{caption}
+\captionsetup[figure]{labelfont={color=title}, labelformat=empty}
+\captionsetup[table]{labelfont={color=title}, labelformat=empty}
+% Color of enumerate items
+\setbeamercolor{enumerate item}{fg=title}
+\usepackage{tikz, tikz-cd, animate}
+\usetikzlibrary{shapes,backgrounds,trees,arrows,shapes.misc}
+\usetikzlibrary{decorations.pathreplacing, decorations.markings}
+\usepackage{pgfplotstable}
+\usepackage{wrapfig}
+\usepackage{booktabs}
+\usepackage{dcolumn}
+\usepackage{amsmath}
+% Command for varying parameter
+\newcommand{\arrowdot}[1][]{%
+  \begin{tikzpicture}[#1]
+    \draw[->, >=latex] (0,0ex) -- (2em,0ex);
+    \draw[fill] (1em,0ex) circle (0.4ex);
+  \end{tikzpicture}%
+}
+% Command for fixed parameter
+\newcommand{\arrowsimple}[1][]{%
+  \begin{tikzpicture}[#1]
+    \draw[->, >=latex] (0,0ex) -- (2em,0ex);
+  \end{tikzpicture}%
+}
+\newcommand{\ind}{\perp\!\!\!\!\perp}
+\usepackage[sectionbib]{apacite}
+\renewcommand{\bibliographytypesize}{\footnotesize}
+% Set the design of the footer
+\makeatletter
+\setbeamertemplate{title page}[default][left]
+\@addtoreset{subfigure}{figure}
+\setbeamercolor{author in head/foot}{fg=white, bg=fore}
+\setbeamercolor{date in head/foot}{fg=white, bg=fore}
+\setbeamercolor{institute in head/foot}{fg=white, bg=fore}
+\setbeamertemplate{footline}
+{
+  \leavevmode%
+  \hbox{%
+  \begin{beamercolorbox}[wd=.3333333\paperwidth,ht=2.25ex,dp=1ex,center]{author in head/foot}%
+    \usebeamerfont{author in head/foot}\insertauthor
+  \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.3333333\paperwidth,ht=2.25ex,dp=1ex,center]{institute in head/foot}%
+    \usebeamerfont{institute in head/foot}Bamberg
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[wd=.3333333\paperwidth,ht=2.25ex,dp=1ex,right]{date in head/foot}%
+    \usebeamerfont{date in head/foot}\insertshortdate{}\hspace*{2em}
+    \insertframenumber{} / \inserttotalframenumber\hspace*{2ex}
+  \end{beamercolorbox}}%
+  \vskip0pt%
+}
+\makeatother
+\title{Structural Equation Modeling with \textsf{R} and \textsf{lavaan}}
+\subtitle{Day 3: Multilevel Structural Equation Models}
+\author{Constantin Manuel Bosancianu}
+\institute{WZB Berlin Social Science Center \\ \textit{Institutions and Political Inequality}\\\href{mailto:manuel.bosancianu@gmail.com}{manuel.bosancianu@gmail.com}}
+\date{September 22, 2021}
+\begin{document}
+\maketitle
+
+% PREAMBLE %
+\section{Preamble}
+\begin{frame}
+  \frametitle{Today's plan}
+<<r setup, include = FALSE, warning=FALSE, message=FALSE, comment=NA, results='hide'>>=
+# Setup chunk
+knitr::opts_chunk$set(echo = FALSE,
+                      error = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      comment = NA,
+                      eval = TRUE)
+
+check.packages <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg))
+    install.packages(new.pkg, dependencies = TRUE,
+                     repos = "https://cran.rstudio.com")
+  sapply(pkg, require, character.only = TRUE)
+}
+
+pkgList <- c("tidyverse","scales","texreg","broom",
+             "arm","kableExtra","lavaan","psych","semPlot",
+             "semTools","readstata13")
+check.packages(pkgList)
+
+# Logical switch for generating output
+generateFigs <- FALSE
+@
+
+  Today we join some of the insights from the January workshop on MLM with what we covered in the past 2 days:
+
+  \begin{itemize}
+  \item the need for multilevel specifications\pause
+  \item the logic of MSEM\pause
+  \item multilevel measurement models
+  \item multilevel path models
+  \end{itemize}\pause\bigskip
+
+  From the software perspective, \textbf{lavaan} is still adding some more advanced capabilities, but the project is making constant advances in this.
+
+\end{frame}
+
+
+\section{Arguing for MLM}
+\begin{frame}
+\begin{center}
+    \Huge The Multilevel Perspective
+\end{center}
+\end{frame}
+
+\begin{frame}
+  \frametitle{Value of MLM}
+
+MLMs are uniquely suited to capturing one type of social complexity: the way individuals/firms/NGOs act or think may be context-dependent.\pause\bigskip
+
+An example which I focused on in January (and continue to do so in my research) are the cross-country differences in the likelihood that lower-income people participate in politics.\pause\bigskip
+
+Many similar examples related to educational research, e.g. differences between schools in how much progress students make over a 4-year cycle.
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Cross-national variance}
+
+\begin{table}
+\centering
+\begin{tabular}{lcc}
+\toprule[0.2em]
+	                              & Micro     & Macro            \\
+\midrule
+\textit{Political participation}      & income    & party polarization \\
+                                      & efficacy  & welfare state institutions \\
+\textit{Trust}                        & education & post-communist country \\
+\textit{Religiosity}                  & age       & income inequality \\
+\bottomrule[0.2em]
+\end{tabular}
+\end{table}
+\bigskip
+\pause
+
+Trying to see the world like this trains your mind: how individual actions shape context, and how context, in turn, shapes individual action.
+
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{MLM: statistical reasons}
+  \begin{itemize}
+    \item obtain accurate SEs for estimates in instances of clustered data; \pause
+    \item \textit{model} the heteroskedasticity (unobserved heterogeneity) in the data.
+  \end{itemize}\pause\bigskip
+
+  Because we're typically dealing with complex sample designs, formulas for standard errors are imprecise.\pause\bigskip
+
+  As SEs are incorporated into significance tests, we risk rejecting the null hypothesis more often than we should.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{One OLS assumption}
+
+\textbf{Homoskedasticity}: $\epsilon \sim \mathcal{N}(0,\sigma^2)$.
+
+\begin{figure}
+\centering
+\begin{subfigure}[c]{.45\textwidth}
+\begin{tikzpicture}[scale=0.70]
+% For the regression graph below
+\pgfmathsetseed{1139} % set the random seed
+\pgfplotstableset{ % Define the equations for x and y
+ 	create on use/x/.style={create col/expr={\pgfplotstablerow/1.5}},
+ 	create on use/y/.style={create col/expr={1.5*rand}}
+}
+% create a new table with 50 rows and columns x and y:
+\pgfplotstablenew[columns={x,y}]{60}\loadedtable
+\begin{axis}[
+xlabel=X, % label x axis
+ylabel=Residuals, % label y axis
+axis lines=left, %set the position of the axes
+xmin=0, xmax=42, % set the min and max values of the x-axis
+ymin=-5, ymax=5, % set the min and max values of the y-axis
+clip=false
+]
+
+\addplot [only marks] table {\loadedtable};
+\draw[ultra thick, dashed, title] (axis cs:\pgfkeysvalueof{/pgfplots/xmin},0) -- (axis cs:\pgfkeysvalueof{/pgfplots/xmax},0);
+\end{axis}
+\end{tikzpicture}
+\caption{Homoskedasticity}
+\end{subfigure}
+\begin{subfigure}[c]{.45\textwidth}
+\begin{tikzpicture}[scale=0.70]
+% For the regression graph below
+\pgfmathsetseed{1141} % set the random seed
+\pgfplotstableset{ % Define the equations for x and y
+	create on use/x/.style={create col/expr={\pgfplotstablerow/1.5}},
+	create on use/y/.style={create col/expr={(5 - \pgfplotstablerow/15)*rand}}
+}
+% create a new table with 50 rows and columns x and y:
+\pgfplotstablenew[columns={x,y}]{60}\loadedtable
+\begin{axis}[
+xlabel=X, % label x axis
+ylabel=Residuals, % label y axis
+axis lines=left, %set the position of the axes
+xmin=0, xmax=42, % set the min and max values of the x-axis
+ymin=-5, ymax=5, % set the min and max values of the y-axis
+clip=false
+]
+
+\addplot [only marks] table {\loadedtable};
+\draw[ultra thick, dashed, title] (axis cs:\pgfkeysvalueof{/pgfplots/xmin},0) -- (axis cs:\pgfkeysvalueof{/pgfplots/xmax},0);
+\end{axis}
+\end{tikzpicture}
+\caption{Heteroskedasticity}
+\end{subfigure}
+\end{figure}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{The case of clustered data}
+
+\begin{figure}
+\centering
+\includegraphics[scale=0.45]{../03-graphs/03-01}
+\caption{Variation in the effect of income on political efficacy (ISSP Citizenship II, 2016)}
+\end{figure}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Consequences of heterogeneity}
+
+\begin{minipage}{0.62\textwidth}
+ \centering
+\begin{figure}
+\centering
+\begin{tikzpicture}
+\definecolor{coltitle}{RGB}{255,0,90}
+% For the regression graph below
+\pgfmathsetseed{1142} % set the random seed
+\pgfplotstableset{ % Define the equations for x and y
+	create on use/x/.style={create col/expr={2+2*\pgfplotstablerow}},
+	create on use/y/.style={create col/expr={(0.2*\thisrow{x}+10)+4*rand}},
+	create on use/z/.style={create col/expr={(0.5*\thisrow{x}+10)+4*rand}},
+	create on use/w/.style={create col/expr={(0.9*\thisrow{x}+10)+4*rand}}
+}
+% create a new table with 30 rows and columns x and y:
+\pgfplotstablenew[columns={x,y,z,w}]{30}\loadedtable
+\begin{axis}[
+xlabel=X (predictor), % label x axis
+ylabel=Y (outcome), % label y axis
+axis lines=left, %set the position of the axes
+xmin=0, xmax=70, % set the min and max values of the x-axis
+ymin=0, ymax=70, % set the min and max values of the y-axis
+clip=false
+]
+
+\addplot [only marks, mark=square*] table [x={x}, y={y}] {\loadedtable};
+\addplot [only marks, mark=star] table [x={x}, y={z}] {\loadedtable};
+\addplot [only marks] table [x={x}, y={w}] {\loadedtable};
+\addplot [no markers, very thick, dashed, coltitle] table [x=x, y={create col/linear regression={y=y}}] {\loadedtable};
+\addplot [no markers, ultra thick, dotted, coltitle] table [x=x, y={create col/linear regression={y=z}}] {\loadedtable};
+\addplot [no markers, very thick, dashdotted, coltitle] table [x=x, y={create col/linear regression={y=w}}] {\loadedtable};
+\end{axis}
+\end{tikzpicture}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.34\textwidth}
+In this instance, applying an overall slope (``naive pooling'') to the data will generate heteroskedasticity.\bigskip
+
+This can be addressed with country dummies (\textit{fixed effects}), but these won't explain \textit{why} you're seeing a specific pattern.
+\end{minipage}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{MLM \& SEM: substantive reasons}
+  Systematically account for how outcomes (or \textit{effects}) vary across groups, beyond what can be explained by unit-level factors.\pause\bigskip
+
+  These outcomes can be either observed variables or, even latent variables.\pause\bigskip
+
+  Tremendously helpful if we want to understand why and a measurement structure varies over (many) groups, or to explain variation in a structural component over the same groups.
+\end{frame}
+
+
+
+\section{Multilevel Path Models}
+\begin{frame}
+\begin{center}
+    \Huge Multilevel Path Models
+\end{center}
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Modifications to the SEM framework (I)}
+  The defining feature of the MLM framework was its ability to allow parameters to vary across groups: $\beta_1 \rightarrow \beta_{1j}$.\pause\bigskip
+
+  These varying parameters got a statistical model of their own, with upper-level variables: $\beta_{1j} = \gamma_{10} + \gamma_{11}*\textcolor{title}{Z1_j} + \dots$.\pause\bigskip
+
+  The same approach is used when moving from the SEM to the MSEM framework: allowing parameters, e.g. factor loadings, path coefficients, intercepts, to vary across groups.\pause\bigskip
+
+  The notation becomes cumbersome very quickly (there can now be multiple $\beta_1$s), so I focus on graphical representations.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Modifications to the SEM framework (II)}
+  Estimated covariances can be either fixed (\arrowsimple) or varying (\arrowdot) (different than \textit{free} or \textit{constrained}).\pause\bigskip
+
+  We haven't discussed yet about modeling a mean structure in a SEM, but the same can be done for intercepts
+
+  \begin{minipage}{0.475\textwidth}
+    \begin{figure}
+      \centering
+      \begin{tikzpicture}
+        \node[draw=none] (A) at (0,2) {};
+        \node[draw] (B) at (1.5,2) {$Y_1$};
+        \draw [->, >=latex] (A)--(B);
+      \end{tikzpicture}
+      \caption{Fixed intercept}
+    \end{figure}
+  \end{minipage}  
+  \begin{minipage}{0.475\textwidth}
+    \begin{figure}
+      \centering
+      \begin{tikzpicture}
+        \node[draw=none] (A) at (0,2) {};
+        \node[draw] (B) at (1.5,2) {$Y_1$};
+        \draw [->, >=latex] (A)--(B);
+        \draw[black,fill] (1.15,2) circle [radius=0.6mm] ;
+      \end{tikzpicture}
+      \caption{Varying intercept}
+    \end{figure}
+  \end{minipage}\pause\bigskip
+
+  For modeling, all varying parameters at a lower level are considered latents at the higher level.
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Multilevel path specification}
+  \begin{figure}
+    \centering
+    \includegraphics[scale=0.7]{../03-graphs/03-02.pdf}
+  \end{figure}
+
+  Level-1 intercepts are allowed to vary across level-2 groups.
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Varying intercepts}
+
+  \begin{figure}
+    \centering
+    \includegraphics[scale=0.6]{../03-graphs/03-02.pdf}
+  \end{figure}
+  
+  Both intercepts (for $Y_1$ and $Y_2$) are assumed to follow a Gaussian distribution, with the means explained by $Z_j$ (group-level factor).
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Varying intercepts and slopes}
+
+  \begin{figure}
+    \centering
+    \includegraphics[scale=0.6]{../03-graphs/03-03.pdf}
+  \end{figure}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Estimation and model fit}
+  Similar to standard SEM, makes heavy use of ML and variations of it that are more robust to non-normality (robust ML, and the Bollen--Stine bootstrap).\pause\bigskip
+
+  Model fit assessment is conducted using same indicators (model $\chi^2$, RMSEA, CFI, SRMR) as presented yesterday.\pause\bigskip
+
+  The first 3 provide a single number assessment; for multilevel models, that means sometimes the level-1 sample size dominates.\pause\bigskip
+
+  The SRMR is the only index that provides a model fit summary for the within-level and the between-level.
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Partially-saturated model test}
+  A specific approach to MSEM: Ryu and West's \citeyear{ryu_level_2009} \textit{partially-saturated model test}; unfortunately, currently not implemented as a standard command.\pause\bigskip
+
+  Logic:
+
+  \begin{itemize}
+  \item model is specified with a saturated ``between'' part $\Rightarrow$ misfit must come from ``within'' part
+    \item model is then specified with a saturated ``within'' part $\Rightarrow$ misfit must come from ``between'' part
+  \end{itemize}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Mediation in MSEM}
+  Mediation poses problem in a standard multilevel setting, as it's hard to isolate cross-level dynamics ($2 \rightarrow 1 \rightarrow 1$): we can't disentangle within-group and between-group effects \cite{zhang_testing_2009}.\pause\bigskip
+
+  MSEM allows for tests of quite diverse linkages: $1 \rightarrow 1 \rightarrow 2$, $2 \rightarrow 1 \rightarrow 2$, or $1 \rightarrow 2 \rightarrow 2$ (level-2 constructs can be outcomes in SEM).
+\end{frame}
+
+
+
+\section{Multilevel Factor Models}
+\begin{frame}
+\begin{center}
+    \Huge Multilevel Factor Models
+\end{center}
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Multiple-group CFA (MG-CFA)}
+  A precursor to multilevel CFA: checking for measurement \textit{invariance} by checking factor loadings across multiple groups, e.g. women and men, East and West Germany.\pause\bigskip
+
+  \textit{Invariance}: individuals from two different populations with the same level on the latent construct have the same scores on the measured indicators.\pause\bigskip
+
+  This property is important if we want to apply the same measurement instrument (political efficacy, political trust, populist attitudes) across contexts.\bigskip
+
+  Without it, cross-context differences might be just due to measurement error.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Multilevel CFA}
+  Multilevel CFA aims at the same insights as MG-CFA, but has the toolbox to pursue these questions across many more groups:
+
+  \begin{itemize}
+  \item it can test whether the within-group structure of measurement matches the between-group one\pause
+  \item level-2 covariates can be used to explain variance in level-2 constructs (becoming a full structural regression model)\pause
+  \item allows for testing of measurement invariance across many groups at the same time
+  \end{itemize}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{2-level CFA: random intercepts (I)}
+  The variance of an observed indicator is split into 2 components, within- and between-, which are additive and orthogonal:
+
+  \begin{equation}
+    \centering
+    Var(Y) = Var(Y)_B + Var(Y)_W
+  \end{equation}\pause\bigskip
+
+  The ``within'' variance is explained by the level-1 latent factors. The ``between'' part is explained with the level-2 latent factors.
+  
+  These two sets of specifications together comprise the 2-level measurement structure.
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{2-level CFA: random intercepts (II)}
+
+\begin{minipage}{0.6\textwidth}
+  \begin{figure}
+    \centering
+    \includegraphics[scale=0.7]{../03-graphs/03-04.pdf}
+  \end{figure}
+\end{minipage}
+\begin{minipage}{0.35\textwidth}
+  At the ``between'' part we're explaining the intercepts from the ``within'' part using 2 factors.\pause\bigskip
+
+  We have to assume that the $g_1$, $g_2$, \dots $g_j$ covariance matrices for the groups are identical $\Rightarrow$ measurement invariance.
+\end{minipage}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Between-group variance}
+  As an initial stage, just as in a standard MLM, we would check that there is sufficient between-group variance in the indicators.\pause\bigskip
+
+  The standard tool for this is the ICC (\textit{intra-class correlation coefficient}):
+
+  \begin{equation}
+    \centering
+    \rho = \frac{\sigma_{\alpha}^2}{\sigma_{\alpha}^2 + \sigma_{y}^2}
+  \end{equation}\pause
+
+  where $\sigma_{total}^2 = \sigma_{\alpha}^2 + \sigma_{y}^2$\pause\bigskip
+
+  With insufficient variance, there is not much for group-level factors to explain.
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{ICC decomposition}
+
+\begin{figure}
+\centering
+\begin{tikzpicture}
+\draw [ultra thick]  (-2,0) -- (5,0) node [left,font=\tiny] at (-2.2,-1.5) {Overall intercept ($\gamma_{00}$)};
+\draw [->,>=latex] (-3,-1.2) -- (-2.1,-0.05);
+% First group
+\draw [very thick]   (-1.5,1) -- (0.5, 1);
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (-1.25, 1.28) {};
+\draw [thick] (-1.25,1) -- (-1.25,1.28);
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (-1.05, 0.76) {};
+\draw [thick] (-1.05,1) -- (-1.05,0.76);
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (-0.70, 0.5) {};
+\draw [thick] (-0.70,1) -- (-0.70,0.5);
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (-0.25, 1.55) {};
+\draw [thick] (-0.25,1) -- (-0.25,1.55);
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (0.05, 1.58) {};
+\draw [thick] (0.05,1) -- (0.05,1.58);
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (0.45, 0.33) {};
+\draw [thick] (0.45,1) -- (0.45,0.33);
+\draw[decorate,decoration={brace}] (-1.8,0.4) -- (-1.8,1.6) node [left,font=\tiny, text width=1cm] at (-2,1) {Within-group variation};
+\draw[decorate,decoration={brace}] (0.55,0.95) -- (0.55,0.37) node [right,font=\tiny, text width=0.5cm] at (0.55,0.65) {\scalebox{0.8}{Indiv. residual ($e_{ij}$)}};
+\draw [<-, >=latex] (-0.05,1) -- (-0.05,0);
+% Second group
+\draw [very thick]   (2,-1.5) -- (4, -1.5);
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (2.1, -1.2) {};
+\draw [thick] (2.1,-1.5) -- (2.1,-1.2);
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (2.45, -0.5) {};
+\draw [thick] (2.45,-1.5) -- (2.45,-0.5);
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (2.95, -0.7) {};
+\draw [thick] (2.95,-1.5) -- (2.95,-0.7);
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (3.25, -2) {};
+\draw [thick] (3.25,-1.5) -- (3.25,-2);
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (3.75, -3.1) {};
+\draw [thick] (3.75,-1.5) -- (3.75,-3.1);
+\draw[decorate,decoration={brace}] (1.8,-3.2) -- (1.8,-0.4) node [left,font=\tiny, text width=1cm] at (1.5,-1.8) {Within-group variation};
+\draw [<-, >=latex] (3.8,-1.5) -- (3.8,0);
+\draw[decorate,decoration={brace}] (3.9,-0.05) -- (3.9,-1.45) node [right, font=\tiny, text width=0.1cm] at (3.9,-0.70) {\scalebox{0.8}{Group residual ($u_{0j}$)}};
+% Third group
+\draw [very thick]   (3.5,2) -- (4.5,2) node [left,font=\tiny, text width=1cm] at (2.8,3.2) {Group intercept};
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (3.7, 2.75) {};
+\draw [thick] (3.7,2.75) -- (3.7,2);
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (4, 2.2) {};
+\draw [thick] (4,2.2) -- (4,2);
+\node [fill=fore, circle,inner sep=0pt,minimum size=5pt] at (4.1, 1.05) {};
+\draw [thick] (4.1,1.05) -- (4.1,2);
+\draw[decorate,decoration={brace}] (5.7,2) -- (5.7,-1.5) node [right,font=\tiny, text width=1cm] at (5.8,0.25) {Between-group variation};
+\draw [->,>=latex] (2.6,2.8) -- (3.4,2.1); % arrow to label group intercept
+\draw [->,>=latex] (4.4,0) -- (4.4,2);
+\end{tikzpicture}
+\caption*{Adapted from \citeA{merlo_brief_2005}.}
+\end{figure}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Identification}
+  The rule presented in the beginning is that there need to be fewer free parameter than the number of observations: $\frac{p(p+1)}{2}$.\pause\bigskip
+
+  These are also the off-diagonal elements in the variance-covariance matrix of observed indicators.\pause\bigskip
+
+  In a multilevel setting, we have 2 such matrices: for the ``within'' and the ``between''  components.\pause\bigskip
+
+  Therefore, the maximum number of estimable parameters is $p(p+1) + k$, where $k$ is the number of indicator intercepts.
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{2-level CFA: random loadings}
+  The assumption of measurement invariance is limiting. What if specific groups have a different measurement structure than others, e.g. employees from certain companies have different patterns in their scores?\pause\bigskip
+
+  To check for this, we would allow both intercepts and factor loadings to vary across groups.\pause\bigskip
+
+  The implication is that we now consider the $g_1$, $g_2$, \dots $g_j$ group covariance matrices to be different.\pause\bigskip
+
+  As before, we can add group-level indicators to explain the cross-group variance in loadings.
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Final point on software}
+  The capabilities of \textbf{lavaan} are still limited here, though growing fast.\bigskip
+
+  Currently, \textbf{lavaan} can only run multilevel CFA with random intercepts.\pause\bigskip
+
+  Furthermore, only with continuous indicators!\pause\bigskip
+
+  For more advanced models, \textbf{Mplus} is, by and large, the most capable software. It also has a \textbf{R} package to send data for estimation: \textbf{MplusAutomation} \cite{hallquist_MplusAutomation_2018}.
+\end{frame}
+
+% FRAME
+\begin{frame}
+\begin{center}
+    \Huge Thank \textcolor{title}{you} for the kind attention!
+\end{center}
+\end{frame}
+
+% REFERENCES
+
+\begin{frame}[allowframebreaks]
+\frametitle{References}
+\bibliographystyle{apacite}
+\bibliography{Bibliography}
+\end{frame}
+
+\end{document}

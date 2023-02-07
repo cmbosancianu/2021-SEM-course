@@ -1,0 +1,23 @@
+\documentclass{standalone}
+\usepackage{tikz, tikz-cd}
+\usetikzlibrary{shapes, decorations.markings}
+\begin{document}
+
+\begin{tikzpicture}[scale=0.9]
+\node[draw] (o1) at (5,3) {\tiny{TURN}};
+\node[draw] (p1) at (1,4.5) {\tiny{EDUC}};
+\node[draw] (p2) at (1,3) {\tiny{INT}};
+\node[draw] (p3) at (1,1.5) {\tiny{KNOW}};
+\node[draw, circle, inner sep=2] (d1) at (6,4) {\tiny{$D$}};
+\draw [->, very thin, >=latex] (p1)--(o1.west) node [midway, above] {\tiny{$\beta_1$}};
+\draw [->, very thin, >=latex] (p2)--(o1.west) node [midway, above] {\tiny{$\beta_2$}};
+\draw [->, very thin, >=latex] (p3)--(o1.west) node [midway, above] {\tiny{$\beta_3$}};
+\draw [->, very thin, >=latex] (d1)--(o1.north east) node [midway, above] {\tiny{1}};
+% Residuals:
+\draw[<->, very thin, >=latex] (p1) to [out=70,in=110,looseness=7] (p1);
+\draw[<->, very thin, >=latex] (p2) to [out=70,in=110,looseness=7] (p2);
+\draw[<->, very thin, >=latex] (p3) to [out=70,in=110,looseness=7] (p3);
+\draw[<->, very thin, >=latex] (d1) to [out=70,in=110,looseness=7] (d1);
+\end{tikzpicture}
+
+\end{document}

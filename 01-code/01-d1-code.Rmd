@@ -1,0 +1,448 @@
+---
+title: "SEM workshop: Day 1 code"
+author: "Constantin Manuel Bosancianu"
+date: "`r format(Sys.time(), '%B %d, %Y | %H:%M:%S | %Z')`"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: false
+    code_folding: hide
+    highlight: pygments
+bibliography: ../04-slides/Bibliography.bib
+---
+
+# Introduction
+
+Welcome to the practical part of the workshop, where we explore R's capabilities in structural equation modeling. Before we begin with coding, I wanted to run through a few preliminary considerations that might help get us started faster.
+
+The first one is that this workshop builds on a January 2021 one; because of this, we start directly with a few more advanced procedures, and don't spend much time recapping foundational concepts from regression or multilevel models.
+
+## Working directory
+As you can see, for this workshop the code is embedded in `.Rmd` files; these have the advantage that they can support both nicely-formatted text (citations, equations, section headers), and R syntax.^[The first part will hopefully allow you to make annotations easier.] The one difference from a standard `.R` file is that Rmarkdown files don't require a line of code to set the working directory. Rather, they use as default working directory the computer folder in which they are placed, at the moment at which they are compiled.
+
+However, if you want to run through the code line-by-line together with me, and make annotations as you go along, you'll have to set the working directory manually. If you're working in **Rstudio** you can do this from the top menu (in the *Session* group there is a *Set Working Directory* option). If you use a different IDE, you might have to do it manually with the `setwd()` function.
+
+## Folder structure
+All scripts assume that you are in the directory where the code file is placed: `./01-code`. They further assume that in the main "SEM" project folder you have the following sub-folders:
+
+* `01-code`
+* `02-data`
+* `03-graphs`
+
+If you have this folder structure in place, the code file should work from beginning to end without an error.^[Naturally, you can also create additional folders, like `04-slides`, or `05-output`, for your personal use.] If you don't, then please manually modify the file paths in the R code below when you get to a section where data is being loaded into memory, or graphs and output are exported on the hard drive.
+
+## Crutches
+Though I'll try to explain every line of code as we go along, in case I don't and something isn't clear after the session, do make use of a few helpful functions:
+
+* `help()`: brings up the help files for a specific function, which contain useful descriptions of the arguments to the function
+* `str()`: brings up the structure of a specific object in R, allowing you to see how to retrieve specific quantities of interest from it.
+
+## Use of `dplyr`
+I tend to use many functions from the `dplyr` package and from some of the other packages that make up the `tidyverse`. Despite some opinions to the contrary ([https://github.com/matloff/TidyverseSkeptic](https://github.com/matloff/TidyverseSkeptic)), I believe it is a very elegant way of thinking about coding, and one which I think will grow in importance. It pays off to learn it early and well.
+
+If you're running into trouble with these functions, please check chapters 5 and 12 from this source: [https://r4ds.had.co.nz/index.html](https://r4ds.had.co.nz/index.html). It contains a selection of the most important "verbs" found in `dplyr` together with use examples.
+
+
+
+# Loading packages
+In this part of the code file I simply load the packages we're going to use today. The `check.packages()` function is a custom one. It checks whether packages from the list provided below in the `pkg.list` vector are installed. If they are, it simply loads them; if they are not, it first installs them and then loads them.
+
+```{r setup-packages, warning=FALSE, message=FALSE, comment=NA, results='hide'}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      error = FALSE,
+                      comment = NA,
+                      message = FALSE)
+
+check.packages <- function(pkg){
+    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+    if (length(new.pkg))
+        install.packages(new.pkg, dependencies = TRUE,
+                         repos = "https://cran.rstudio.com")
+    sapply(pkg, require, character.only = TRUE)
+}
+
+# The list of packages that should be checked.
+pkg.list <- c("tidyverse","scales","texreg","broom",
+             "kableExtra","lavaan","psych","semPlot",
+             "semTools","haven")
+check.packages(pkg.list)
+```
+
+You will see that this is quite an extensive list of packages; worse yet, they have a good number of dependent packages that also require installation. This might take some time to install, particularly if you're doing this while also connected to a Zoom video talk, so I would suggest that you run this entire code chunk and let it run while I make a few introductory remarks about the data we'll use today.
+
+# Factor analysis models
+Let's start with factor analysis models, where I would like to expand on the example provided earlier with political efficacy. The data comes from the 1987 *American National Election Study* Pilot study. The pilot studies are usually smaller samples where new questions and scales are tested for validity prior to their inclusion in the pre-election main study. In this example, we focus on the battery of items devoted to political efficacy, all of which are recorded on 5-point scales which range from "strongly agree" (1) to "strongly disagree" (5).
+
+Statements:
+
+1. "Most of the people running our government are well-qualified to handle the problems that we are facing in this country." (`V875216`)
+2. "Quite a few of the people running our government are not as honest as the voters have a right to expect." (`V875217`)
+3. "Most public officials can be trusted to do what is right without our having to constantly check on them." (`V875218`)
+4. "Most public officials are truly interested in what the people think." (`V875219`)
+5. "Candidates for office are only interested in people's votes, not in their opinions." (`V875220`)
+6. "Politicians are supposed to be the servants of the people, but too many of them think they are the masters." (`V875221`)
+7. "Generally speaking, those we elect to public office lose touch with the people pretty quickly." (`V875222`)
+8. "I consider myself well-qualified to participate in politics" (`V875267`)
+9. "I feel that I have a pretty good understanding of the important political issues facing our society." (`V875268`)
+10. "Other people seem to have an easier time understanding complicated political issues than I do" (`V875269`)
+11. "I feel that I could do as good a job in public office as most other people." (`V875270`)
+12. "I often don't feel sure of myself when talking with other people about politics and government." (`V875271`)
+13. "I think that I am as well-informed about politics and government as most people." (`V875272`)
+
+The goal is to use these statements in a standard EFA/CFA analysis, and then to also showcase an estimation approach that is more robust to deviations from normality. The main reason for using this example is that you are very likely to keep encountering data with 5 or 6 categories in political science, for which a standard estimation approach will produce biased results.^[Continuous indicators do exist, such as feeling thermometers toward candidates, but applying factor analysis to these variables tends to produce predictable results. Since efficacy is a concept borrowed from educational research, I also thought this example might be of more interest than a standard political science one.]
+
+## Cleaning data
+We start with reading in the data from the ANES 1987 Pilot Study, and with some simple cleaning of the variables we intend to use in the analysis.
+
+```{r fa-read-data}
+anesDF <- read_dta("../02-data/03-ANES-pilot-1987.dta")
+
+# Also define a small custom cleaning function that will simplify the
+# recoding process downstream.
+spec_rec <- function(x) {
+  if_else(x %in% c(0,8,9), NA_real_, x)
+}
+```
+
+Below you can see a pretty long pipe sequence, but it does all the recoding we'll need in this section. One important thing to point out is how I've renamed all the 13 indicator with shorter names, to make the **lavaan** syntax easier to read. I've also inverted the measurement scales for a few of these indicators (`V875216`, `V875218`, `V875219`, `V875267`, `V875268`, `V875270`, `V875272`). This is because I wanted to ensure that high values on all these indicators denote a higher level of self-perceived efficacy.
+
+```{r fa-clean-data}
+anesDF <- anesDF %>% 
+  dplyr::select(V875267:V875272, V875216:V875222, V860595, V860596,
+                V860599, V860733, V860738, V860756, V860261, V860301,
+                V860309, V860448) %>% 
+  mutate_at(.vars = vars(V875267:V875222, V860738, V860261, V860301,
+                         V860309, V860448),
+            .funs = as.numeric) %>% 
+  mutate_at(.vars = vars(V875267:V875222),
+            .funs = spec_rec) %>% 
+  rename(a15a = V875216,
+         a15b = V875217,
+         a15c = V875218,
+         a15d = V875219,
+         a15e = V875220,
+         a15f = V875221,
+         a15g = V875222,
+         a38a = V875267,
+         a38b = V875268,
+         a38c = V875269,
+         a38d = V875270,
+         a38e = V875271,
+         a38f = V875272,
+         age = V860595,
+         married = V860596,
+         yrs_educ = V860599,
+         income_cat = V860733,
+         relig_attn = V860738,
+         white = V860756,
+         voted_86 = V860261,
+         pol_int = V860301,
+         contact = V860309,
+         increase_spend = V860448) %>% 
+  mutate_at(.vars = vars(married, yrs_educ, income_cat, relig_attn,
+                         white, voted_86, pol_int, contact, increase_spend),
+            .funs = zap_labels) %>% 
+  mutate(a15a = 6 - a15a,
+         a15c = 6 - a15c,
+         a15d = 6 - a15d,
+         a38a = 6 - a38a,
+         a38b = 6 - a38b,
+         a38d = 6 - a38d,
+         a38f = 6 - a38f,
+         married = case_when(married==1 ~ 1,
+                             married>=2 ~ 0,
+                             married==9 ~ NA_real_),
+         yrs_educ = if_else(yrs_educ==99, NA_real_, yrs_educ),
+         income_cat = if_else(income_cat==98, NA_real_, income_cat),
+         relig_attn = if_else(relig_attn==9, NA_real_, relig_attn),
+         relig_attn = 6 - relig_attn,
+         white = case_when(white==1 ~ 1,
+                           white>=2 ~ 0),
+         voted_86 = if_else(voted_86==5, 0, voted_86),
+         pol_int = if_else(pol_int %in% c(8,9), NA_real_, pol_int),
+         pol_int = 5 - pol_int,
+         contact = case_when(contact==8 ~ NA_real_,
+                             contact==1 ~ 1,
+                             contact==5 ~ 0),
+         increase_spend = if_else(increase_spend %in% c(0,8,9), NA_real_, increase_spend))
+```
+
+It's also visible in the recoding sequence that I add a number of other variables to the data, such as age, income, religiosity, political interest, preference for increased budget spending, and a few others. These will come in handy if you want to try our a full structural regression model on this data after the workshop.
+
+## Single-factor model
+We start with a single-factor model; we might call this factor..."political efficacy". After all, all these sentences are about whether favorable circumstances exist for meaningful political interactions with other citizens, as well as between citizens and politicians. Ultimately, if there is no evidence for a more complex structure among the indicators, there is little sense in investigating more dimensions in the data.
+
+We would typically start the analysis with a look at the correlation matrix, produced here with Spearman's $\rho$. The listwise deletion procedure does lead to some data loss, but there's not much we can do about this right now.
+
+```{r cfa-correlation-matrix, results="asis"}
+tempDF <- na.omit(anesDF[ ,c("a38a","a38b","a38c","a38d","a38e",
+                             "a38f","a15a","a15b","a15c","a15d",
+                             "a15e","a15f","a15g")])
+
+round(cor(tempDF,
+          use = "everything",
+          method = "spearman"),
+      digits = 2) %>%
+    kable(format = "html") %>%
+    kable_minimal() %>%
+    column_spec(1, bold = TRUE, border_right = TRUE)
+```
+
+Though a bit faint, notice the patterns of correlations in the data, particularly between the **A38a**-**A38f** indicators and the **A15a**-**A15g** ones. There is clearly some grouping visible. This should be our first indication that perhaps a single-factor solution might not be the most suitable for this data.
+
+```{r cfa-single-factor, cache=TRUE}
+model1 <- ' efficacy =~ a38a + a38b + a38c + a38d + a38e + a38f + a15a + a15b + a15c + a15d + a15e + a15f + a15g '
+
+cfa1.fit <- cfa(model = model1,
+                data = tempDF,
+                ordered = TRUE,
+                std.lv = TRUE)
+```
+
+We proceed with checking how this single-factor solution fits the data. This is also our first chance to see how **lavaan** syntax looks like. First, you can see that **lavaan** expects you to define a model formula as a separate string. This formula is then fed into the estimation function that is needed for a specific model--in this case, that's the `cfa()` function. Second, you can see that the formula follows this template: `latent variable =~ indicator1 + indicator2 + indicator3`. The presence of the `=~` operator tells **lavaan** you're defining a latent variable, and that the variable names after this comprise the indicators that you have measured for this latent variable. In the background, **lavaan** does a number of things by default: (1) the factor loading on the first indicator is fixed to 1 (though not in the code above!); (2) residual variances are added; (3) correlations between exogenous latents are estimated by default.
+
+We then proceed to estimate the model. The `cfa()` function comes with a host of arguments, which you can check in the help files. The most important for us here is `ordered = `, which tells **lavaan** our indicators are ordered categories, and `std.lv = `, which asked **lavaan** to standardize the latent variables, so as to produce factor loadings for all indicators.^[You can also see an argument called `sample.cov =`. This is very important, as it allows you to run a CFA model without the raw data at hand, by only using as input the variance-covariance matrix (though this strategy has some limitations).]
+
+```{r cfa-results-1-factor}
+summary(cfa1.fit, fit.measures = TRUE)
+```
+
+The output you get is extensive, but the most important parts are easy to spot. I don't want to spend much time now on otherwise very useful details about estimation, or model fit statistics--we're going to cover those extensively tomorrow. If you focus toward the middle of the output, you can see a block of results that is labeled **Latent variables**, and this contains the information we care about.
+
+We see listed there factor loadings (what Kline calls *pattern coefficients*) for all indicators, in their *standardized* format; these are likely the quantities you're most interested in reporting to your readers. Because we opted to scale latent factors by imposing a **unit variance identification**, none of the factor loadings are constrained to be 1.^[For fun, try to re-run the estimation with the `cfa()` function, but this time ask that the latent variables should not be standardized. See which parts of the output change.] We don't see a very consistent structure, with **A38c**, **A15a**, **A15b**, **A15c**, and **A15d** not loading as strongly on this factor. We do get an inkling that perhaps the indicators in the **A15** battery of items don't load so strongly on this latent factor, but it's not a very strong pattern. Keep in mind throughout this discussion that the indicators mentioned here are ordinal, so these factor loadings refer to the latent indicator that lies behind the 5-categories used to measure our items.
+
+We also see a block of output labeled **Thresholds**, which refer to thresholds of transition between a category and the one immediately above it on the ordinal scales of the indicators. We also have a block labeled **Intercepts**, though this is empty right now because we're only modeling a covariance structure (not a mean structure as well)---this is why we don't get any intercept estimates. Finally, in the **Variances** block we get the estimated residual variances for our indicators, as well as a residual variance of 1 for our "efficacy" latent (because we used a UVI constraint).
+
+We will return to this example tomorrow to discuss the model fit as well; for now, I'll ask you to trust me that the model fit is very poor for this 1-factor solution.
+
+
+## Two-factor model
+Let's try a two-factor model and see how it fits the data. There is good theoretical support for doing this, as our collection of items seems to tap into 2 different perspectives: (1) whether an individual perceives herself able to participate in politics, and (2) whether she perceives the political system (politicians) as being responsive to the preferences of citizens. These two views would match an "internal" and "external" component of efficacy.
+
+```{r cfa-two-factor, cache=TRUE}
+model2 <- ' internal =~ a38a + a38b + a38c + a38d + a38e + a38f
+            external =~ a15a + a15b + a15c + a15d + a15e + a15f + a15g '
+
+cfa2.fit <- cfa(model = model2,
+                data = tempDF,
+                ordered = TRUE,
+                std.lv = TRUE)
+```
+
+Look now at how the model is specified: we define 2 factors, called `internal` and `external`, and directly list how each observed indicator goes with each factor. Given that this is *confirmatory* factor analysis, the software expects this from us. We then proceed to estimate this using the same `cfa()` function.
+
+```{r cfa-results-two-factor}
+summary(cfa2.fit, fit.measures = TRUE)
+```
+
+You can notice a few things here. First, that the **A15a** indicator doesn't really load to well on the external factor. This might constitute evidence that it doesn't really tap into an external efficacy latent orientation. Second, that you now also have a **Covariances** field, where by default you get an estimate of the covariance between *internal* and *external* efficacy. If you want to fix the covariance to 0, you would just change the model definition to include this line: `internal ~~ 0*external`. This would essentially make the factors orthogonal (uncorrelated) with each other. If you want to, give it a try and see what changes this produces.
+
+We will only cover this tomorrow, but for now please trust me that there is good evidence from model fit statistics that the 2-factor solution fits the data better than a single-factor one.
+
+Remember that the standardized factor loadings convey valuable information: their squared values represent the proportion of explained variance in the indicator (by the latent factor). If you want to see the unstandardized ones as well, just set `std.lv=FALSE` in the `cfa()` function, and run the estimation again.
+
+In a paper you might want to present a table with estimates for factor loadings and error variances both in standardized and unstandardized format.
+
+## Correlation residuals
+It's good to examine correlation residuals, as a way to determine how the data departs from your hypothesized model. Generally, any residual correlation larger in absolute value than 0.10 indicate that the models does not approximate well the corresponding sample associations.
+
+```{r cfa-residuals-two-factor, results = 'asis'}
+lavResiduals(cfa2.fit, type = "cor")$cov %>%
+    kable(format = "html", digits = 2) %>%
+    kable_minimal() %>%
+    column_spec(1, bold = TRUE, border_right = TRUE)
+```
+
+## Potential modifications
+There are many alternative models that could be tested: specifying one of the indicators as an observed predictor of one of the latent factors as opposed to an outcome, allowing for an indicator to load on multiple outcomes. We can't engage in the first strategy just yet (we haven't covered full structural regression models), but the second is within our reach, and **lavaan** makes it easily accessible. We allow here **A38d** to load on both factors, as it can plausibly also be interpreted as a statement about the low quality of politicians.
+
+```{r cfa-two-factor-alt, cache=TRUE}
+model2alt <- ' internal =~ a38a + a38b + a38c + a38d + a38e + a38f
+               external =~ a38d + a15a + a15b + a15c + a15d + a15e + a15f + a15g '
+
+cfa3.fit <- cfa(model = model2alt,
+                data = tempDF,
+                ordered = TRUE,
+                std.lv = TRUE)
+```
+
+This was just a demonstration for illustration purposes; looking at the results, it's pretty clear **A38d** does not load on *external* political efficacy, but for your own research you might find that this situation does happen.
+
+## Plotting results
+For our slides I have generally tended to depict path coefficients on the model graph directly, and I find this helps understanding. You can do this by hand too, with one of the many graph-building tools available online. If you're aiming for quick understanding, however, or producing a graph that can be easily shown to colleagues in a presentation or shared with a co-author, a small function can help with that. This is `semPaths()` from the **semPlot** package.
+
+```{r cfa-two-factor-plot, fig.height=12, fig.width=24}
+semPaths(cfa2.fit, what = "est",
+         intercepts = FALSE,
+         thresholds = FALSE,
+         edge.label.cex=1,
+         edge.color = "black")
+```
+
+The function includes a vast number of arguments, so you can customize your plot quite finely. I wouldn't say that it will produce something "publication-quality", but it will be a nice-enough plot that you can use it for many purposes prior to publication.
+
+## Small task 1
+If you want to try your hand at it, try running an exploratory factor analysis model. **lavaan** does allow you to run it, rest assured of that. Try to see if you are clear about why the output produces all those estimates.
+
+```{r exxample-efa-lavaan}
+model.1 <- 'efa("efa")*f1 +
+efa("efa")*f2 =~ a38a + a38b + a38c + a38d + a38e + a38f +a38d + a15a + a15b + a15c + a15d + a15e + a15f + a15g '
+
+cfa1.fit <- cfa(model = model.1,
+                data = tempDF,
+                ordered = TRUE,
+                std.lv = TRUE)
+
+```
+
+
+
+# Path models
+Having seen how to specify and refine a measurement model, we now turn to structural models. I continue here as well with the example from class. This is the JOBS II field experiment, which was run in SE Michigan in the early 1990, and which targeted individuals who were unemployed at the time. The goal of the seminar was two-fold. First, to impart job-search skills on participants. Second, and in many ways more important, was to enhance self-esteem and one's sense of self-control, as well as self-efficacy and grit in the face of momentary setbacks. It was hypothesized that these psychological orientations deteriorate the longer a person experiences unemployment, and makes finding a new job that much harder.
+
+The study recruited participants from 4 unemployment offices where everyone came in to cash their unemployment payments. Of the people recruited to participate, about 30% were randomized into the control group, which just got a small booklet with tips about how to do job searching. The remaining 70% got allocated to the treatment group, where they attended five 4-hour sessions where both job search skills and psychological training were imparted. It's important to say that of the people invited to participate only about 54% attended the meetings.
+
+Individuals were surveyed at the moment of recruitment into the study but before allocation to treatment and control groups (T1), 2 months after the meetings (T2), and again 6 months after the meetings (T3). You can imagine many outcomes that could be probed here, but the one we will focus on is a person's score on the Hopkins Symptom Checklist for depression, which was measured at T3. The predictor of interest is attendance to the workshop itself. However, we also have a key mediation pathway posited: that attending the workshops will increase one's sense of self-efficacy in job search, which should lower depression at T3.
+
+## Simple model
+I would like to start with a simple model, which will let us focus on the issue of direct and indirect effects. After getting familiar with this model we'll expand it a bit to provide a better estimate of the impact of the seminars.
+
+```{r pm-read-data}
+jobsDF <- read_dta("../02-data/05-Jobs-NoMiss-Cont.dta")
+str(jobsDF)
+```
+
+You can easily see a few key features of the data. The outcome we're interested in is called `depress2`, which is participants' depression score at time T3. The presumed mediator variable is called `mastery`, and it refers to one's sense of control over their environment at T2. The indicator for whether a participant was assigned to the treatment or the control group is found in the data as `treat_num`. The simplest path model we can construct has just these 3 observed measures, with `treat_num` being the only exogenous variable in the model.
+
+
+```{r pm-simple-model}
+model.1 <- ' mastery ~ treat_num
+             depress2 ~ treat_num + mastery '
+
+fit.1 <- sem(model.1, data = jobsDF)
+```
+
+Notice a few things about the syntax we use now in **lavaan**. Since all variables are now observed, we no longer need to make use of the `=~` designation. Instead, all equations look like standard R syntax for a regression specification. We also don't need to designate specific variables as exogenous, or tell **lavaan** which is the mediator variable. The package can figure this out easily from the way we wrote the equations. The estimation is handled this time through the `sem()` function in the **lavaan** package.
+
+```{r pm-simple-model-results}
+summary(fit.1)
+```
+
+You can see a few things in the output. First, the 3 coefficients we're interested, and which can be interpreted as any other regression coefficient. It would appear that sense of control was boosted by taking part in the sessions, and that this, in turn, contributed to a reduction in depression. On the other hand, it does not appear that participating in the workshops did anything to depression directly.
+
+Though we'll only discuss this in depth tomorrow, we also see that a model fit statistic is reported as being 0. This is not surprising, given that what we estimated here is a *just-identified* model, where the number of degrees of freedom is 0. This means that the estimates match perfectly the elements in the covariance matrix for the model.
+
+```{r pm-simple-model-plot, fig.height=6, fig.width=9}
+semPaths(fit.1, what = "est",
+         edge.label.cex=0.9,
+         edge.color = "black",
+         rotation = 2)
+```
+
+You can rely on the same `semPaths()` function to produce a decent-looking plot of the model, though it will take a bit of fiddling with it until you get it to look OK, particularly in what concerns the arrangement of the nodes.
+
+## Larger model
+Even though participation in the workshop was randomized, one's sense of mastery over the surrounding environment was not, which represents a threat to causal inference [@imai_general_2010, @imai_unpacking_2011]. Since this potential source of confounding wasn't dealt with experimentally, we'll have to address it through statistical controls. We test now a larger model, where a host of factors are added.
+
+```{r pm-larger-model-1}
+# A bit of recoding beforehand
+jobsDF <- jobsDF %>% 
+  mutate(educ = zap_labels(educ),
+         hs = if_else(educ<=2, 1, 0))
+
+model.2 <- ' mastery ~ treat_num + econ_hard + sex + age + nonwhite + hs
+             depress2 ~ treat_num + mastery + econ_hard + sex + age + nonwhite + hs '
+
+fit.2 <- sem(model.2, data = jobsDF)
+```
+
+Yet again we see the same dynamic at play as in the simple model: attending the workshop increases a person's sense of mastery of their surroundings. That, in turn reduces the level of depression they are likely to experience 6 months after the workshop. We can also quickly see why there was a need to control for the impact of covariates: those with at most a high school degree exhibit, on average, a lower level of mastery, as well as a lower level of depression. Not controlling for this factor would have induced an association between mastery and depression even if none existed in reality. Adding the covariates also reduced the unexplained variance in both sense of mastery and depression compared to the simpler model.
+
+```{r pm-larger-model-results-1}
+summary(fit.2)
+```
+
+Again, however, this is a *just-identified* model, where the number of estimated parameters equals the number of observations. This is why we don't even bother with an inspection of the residuals matrix--they would all be 0.
+
+## Direct and indirect effects
+You saw earlier today how to compute *indirect* and *total* effects by hand from the output **lavaan** gives you. It's also pretty easy to compute the SE for this indirect effect, and to do a check for statistical significance. Thankfully, that can be easily automated as well, by giving names to specific coefficients in the **lavaan** model definition, and then using them to compute quantities like indirect and total effects. These quantities will then come with estimated SEs and significance tests directly in the output you get from the `sem()` function. Here is a simple application of this, using the model we already have.
+
+```{r pm-larger-model-2}
+model.2 <- ' mastery ~ a*treat_num + econ_hard + sex + age + nonwhite + hs
+             depress2 ~ c*treat_num + b*mastery + econ_hard + sex + age + nonwhite + hs 
+           # indirect effect (a*b)
+             ab := a*b
+           # total effect
+             total := c + (a*b) '
+
+fit.2 <- sem(model.2, data = jobsDF)
+summary(fit.2)
+```
+
+You see here a simple labeling of coefficients, and how new estimates are defined with the `:=` symbol. We define the indirect effect as the multiplication of two path estimates, and the total effect as the sum of an indirect and a direct effect. In the output these coefficients are clearly labelled, and presented in a separate field called **Defined Parameters**. As we saw earlier in class (though on a slightly different model specification, which is why the parameters are different), there appears to be a clear indirect effect of workshop attendance on depression, going through mastery. At the same time, the *direct* effect of participation is simply not discernible from 0: $\beta=0.002, SE=0.033$.
+
+You can imagine a variety of such indirect effects that could be explored, though they would not be as defensible from a causal inference perspective as the impact of participation in the workshop. For example, minority status may have a direct effect on depression, as well as an indirect one, via the likelihood of experiencing economic hardship.^[It's easy to define these pathways, though please keep in mind that behind every pathway there has to be a theoretical justification, which is generally harder when needing to argue for what the proper causal ordering between attitudes is.] Redefining these quantities is very easy with the syntax example from above.
+
+## Small task 2
+Try writing out the model I just described: a direct effect from minority status (`nonwhite`) to depression, as well as an indirect one, through economic hardship (`econ_hard`). See what the indirect and total effects are, and whether they are statistically significant or not.
+
+```{r example-task, eval=FALSE}
+model.ex <- ' econ_hard ~ a*nonwhite + sex + age + hs
+              depress2 ~ treat_num + mastery + b*econ_hard + sex + age + c*nonwhite + hs
+            # indirect effect (a*b)
+              ab := a*b
+            # total effect
+              total := c + (a*b) '
+
+fit.ex <- sem(model.ex, data = jobsDF)
+summary(fit.ex)
+```
+
+
+## Investigating multiple pathways
+Situations where you're presuming the existence of multiple pathways can easily be handled in this setup. For example, let's assume you think that the effect of participation in the workshop is transmitted through 2 mechanisms, corresponding to the two types of courses participants took. One type taught them job search skills, so that should be reflected in a higher level of job-search self-perceived competence (`job_seek`). The other type targeted the development of self-control, grit, and a positive self-image, which should be reflected in a higher sense of mastery (`mastery`). These are the two pathways we probe below, though in a model that excludes the controls, so as to allow us to focus better on the indirect paths, and even to plot them.
+
+```{r pm-multiple-pathways}
+model.3 <- ' mastery ~ a1*treat_num
+             job_seek ~ a2*treat_num
+             depress2 ~ c*treat_num + b1*mastery + b2*job_seek 
+           # indirect effect through mastery
+             ab1 := a1*b1
+           # indirect effect through self-efficacy
+             ab2 := a2*b2
+           # total effect of participation
+             total := c + (a1*b1) + (a2*b2) '
+
+fit.3 <- sem(model.3, data = jobsDF)
+summary(fit.3)
+```
+
+We now have an *over-identified* model, since we're asking **lavaan** to estimate 5 pathways based on 6 observations in the covariance matrix, which is why we have 1 degree of freedom. This is why we also now get a meaningful value for the $\chi^2$, which is a clear rejection of the *exact-fit* hypothesis.
+
+We also see that both our indirect effects are statistically significant:
+
+* How do you interpret these effects?
+* What do you think is making these effects look the way they do?
+
+```{r pm-multiple-pathways-plot, fig.height=12, fig.width=24}
+semPaths(fit.3, what = "est",
+         edge.label.cex=0.9,
+         edge.color = "black",
+         layout = "spring")
+```
+
+# References
+<div id="refs"></div>
+
+
+
+
+
+
+
+
+
+

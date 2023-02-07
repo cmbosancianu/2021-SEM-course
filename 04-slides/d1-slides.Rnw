@@ -1,0 +1,1354 @@
+% Taken from: https://mikedewar.wordpress.com/2009/02/25/latex-beamer-python-beauty/
+\documentclass[12pt,english,pdf,xcolor=dvipsnames,aspectratio=169]{beamer}
+\usetheme{default}
+\beamertemplatenavigationsymbolsempty
+\definecolor{fore}{RGB}{51,51,51}
+\definecolor{back}{RGB}{255,255,255}
+\definecolor{title}{RGB}{255,0,90}
+\setbeamercolor{titlelike}{fg=title}
+\setbeamercolor{normal text}{fg=fore,bg=back}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{multirow}
+\usepackage{mathpazo}
+\usepackage{inputenc}
+\usepackage{parskip}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+\usepackage{hyperref}
+\hypersetup{pdfauthor={Constantin Manuel Bosancianu},
+pdftitle={Structural Equation Modeling},
+pdfsubject={Day 1: Structural and Measurement Models},
+pdfkeywords={Bamberg, workshop, SES, slides, 2021}}
+\usepackage{babel}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.10}
+\usepgfplotslibrary{fillbetween}
+% Defines a checkmark
+\def\checkmark{\tikz\fill[scale=0.4,color=title](0,.35) -- (.25,0) -- (1,.7) -- (.25,.15) -- cycle;}
+\setbeamertemplate{itemize items}{\checkmark}
+% For table captions in Beamer
+\usepackage{caption}
+\captionsetup[figure]{labelfont={color=title}, labelformat=empty}
+\captionsetup[table]{labelfont={color=title}, labelformat=empty}
+% Color of enumerate items
+\setbeamercolor{enumerate item}{fg=title}
+\usepackage{tikz, tikz-cd, animate}
+\usetikzlibrary{shapes,backgrounds,trees,arrows,shapes.misc}
+\usetikzlibrary{decorations.pathreplacing, decorations.markings}
+\usepackage{pgfplotstable}
+\usepackage{wrapfig}
+\usepackage{booktabs}
+\usepackage{dcolumn}
+\usepackage[sectionbib]{apacite}
+\renewcommand{\bibliographytypesize}{\footnotesize}
+% Set the design of the footer
+\makeatletter
+\setbeamertemplate{title page}[default][left]
+\@addtoreset{subfigure}{figure}
+\setbeamercolor{author in head/foot}{fg=white, bg=fore}
+\setbeamercolor{date in head/foot}{fg=white, bg=fore}
+\setbeamercolor{institute in head/foot}{fg=white, bg=fore}
+\setbeamertemplate{footline}
+{
+  \leavevmode%
+  \hbox{%
+  \begin{beamercolorbox}[wd=.3333333\paperwidth,ht=2.25ex,dp=1ex,center]{author in head/foot}%
+    \usebeamerfont{author in head/foot}\insertauthor
+  \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.3333333\paperwidth,ht=2.25ex,dp=1ex,center]{institute in head/foot}%
+    \usebeamerfont{institute in head/foot}Bamberg
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[wd=.3333333\paperwidth,ht=2.25ex,dp=1ex,right]{date in head/foot}%
+    \usebeamerfont{date in head/foot}\insertshortdate{}\hspace*{2em}
+    \insertframenumber{} / \inserttotalframenumber\hspace*{2ex}
+  \end{beamercolorbox}}%
+  \vskip0pt%
+}
+\makeatother
+\title{Structural Equation Modeling with \textsf{R} and \textsf{lavaan}}
+\subtitle{Day 1: Structural and Measurement Models}
+\author{Constantin Manuel Bosancianu}
+\institute{WZB Berlin Social Science Center \\ \textit{Institutions and Political Inequality}\\\href{mailto:manuel.bosancianu@gmail.com}{manuel.bosancianu@gmail.com}}
+\date{September 20, 2021}
+\begin{document}
+\maketitle
+
+% PREAMBLE %
+\section{Preamble}
+\begin{frame}
+
+<<r setup, include = FALSE, warning=FALSE, message=FALSE, comment=NA, results='hide'>>=
+# Setup chunk
+knitr::opts_chunk$set(echo = FALSE,
+                      error = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      comment = NA,
+                      eval = TRUE)
+
+check.packages <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg))
+    install.packages(new.pkg, dependencies = TRUE,
+                     repos = "https://cran.rstudio.com")
+  sapply(pkg, require, character.only = TRUE)
+}
+
+pkgList <- c("tidyverse","scales","texreg","broom",
+             "arm","kableExtra","lavaan","psych","semPlot",
+             "semTools","readstata13")
+check.packages(pkgList)
+
+# Logical switch for generating output
+generateFigs <- FALSE
+@
+
+\begin{center}
+    \Huge \textcolor{title}{Welcome}! It's great to have you in the workshop!
+\end{center}
+
+\end{frame}
+
+
+% FRAME
+\begin{frame}
+  \frametitle{Workshop structure (1)}
+
+First two days focus on 2 core components of SEM models:
+
+\begin{enumerate}
+  \item a measurement model (akin to factor analysis) \pause
+  \item a structural model (path models) \pause
+\end{enumerate}\bigskip
+
+\pause
+
+We also cover the intersection of these two: the full structural equation model (structural + measurement).\bigskip
+
+We go through: (1) specification; (2) identification (\textit{basics}); (3) estimation (\textit{basics}); (4) interpretation; and (5) assessment of fit.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Workshop structure (2)}
+
+Building on the Jan. 2021 workshop in MLM, the last day advances to multilevel SEM (MSEM).\bigskip
+\pause
+
+The transition will be fast, so we focus only on 1--2 key specifications in ML-SEM (to ensure we can cover them well).\bigskip
+\pause
+
+The majority of the lessons from the previous two days hold for ML-SEM specifications, so we will spend more time on the key differences and interpretation.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{What gets obscured}
+
+Limited time means we have to give up on some topics:
+
+\begin{itemize}
+\item the connections between SEM and Judea Pearl's structural causal models approach \cite{pearl_graphs_1998, pearl_causal_2012}\pause
+\item non-recursive SEM \cite{finch_modeling_2015, kline_reverse_2013}\pause
+\item power analysis in SEM \cite{hancock_power_2013}
+\end{itemize}\pause\bigskip
+
+We also won't be able to delve into more complex types of MSEM models, like random slopes MSEM specifications.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Logistics}
+Lecture based on \textcolor{title}{.pdf}. Labs based on \textcolor{title}{.Rdata} \& \textcolor{title}{.R}, and carried out ``live'' (via \textsf{Zoom}).\bigskip
+\pause
+
+Same as before, over the 3 days, time spent on lectures gradually decreases in favor of labs:
+
+\begin{itemize}
+\item D1: $\approx$ 100 min lecture \& 100 min lab
+\item D2: $\approx$ 80 min lecture \& 120 min lab
+\item D3: $\approx$ 60 min lecture \& 140 min lab
+\end{itemize}\bigskip
+\pause
+
+Small part of the lab also devoted to questions about lectures.
+
+\end{frame}
+
+
+
+\section{Introduction}
+\begin{frame}
+\begin{center}
+    \Huge SEM foundations
+\end{center}
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{Value of SEM}
+
+It represents a \emph{very} general statistical framework which can subsume many other approaches: ANOVA, standard regression, factor analysis, multilevel models.\pause\bigskip
+
+Provides a mechanism to take into account \emph{measurement error} in a set of indicators, which other methods (standard regression) have to assume away.\pause\bigskip
+
+Can handle in the same specification (1) measurement issues, and (2) the estimation of causal relationships.\pause\bigskip
+
+Smaller advantages: (1) can model multiple outcomes simultaneously; (2) can accommodate both direct and indirect effects; (3) can produce measures of both local and global fit; (4) can accommodate multiple data configurations.
+
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{Questions probed with SEM}
+
+A marked gain in flexibility when considering the questions it can answer.
+
+\begin{table}
+\centering
+\scriptsize
+\begin{tabular}{p{2.25cm}p{7cm}p{3.25cm}}
+\toprule[0.2em]
+                                & Topic     &             \\
+\midrule
+\textit{Political efficacy}	    & Impact of attentiveness to political news on internal political efficacy  & \cite{semetko_impact_1998} \\
+                                & Investigating the properties (reliability, validity) of a new scale & \cite{morrell_survey_2003} \\
+\textit{Political trust}        & The structure of political trust across different educational groups & \cite{elsas_political_2015} \\
+                                & Association between education and generalized/political trust & \cite{hooghe_cognitive_2012}\\
+\textit{Justification of inequality}  & Link between ``just-world'' belief and justification of inequality & \cite{beierlein_are_2011} \\
+\textit{Political participation} & The connection between personality traits and political participation & \cite{vecchione_personality_2009} \\
+\bottomrule[0.2em]
+\end{tabular}
+\end{table}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Reasons for using SEMs (I)}
+
+\begin{minipage}{0.5\textwidth}
+
+\textbf{Substantive}: allows you to test more accurate depictions of social processes.
+\end{minipage}
+\pause
+\begin{minipage}{0.45\textwidth}
+\begin{figure}[]
+  \centering
+  \includegraphics[width=\textwidth]{../03-graphs/01-01.pdf}
+  \caption{Standard regression}
+\end{figure}
+\end{minipage}
+
+The standard regression approach will assume no measurement error and \textit{independence of predictors}.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Reasons for using SEMs (II)}
+
+\begin{minipage}{0.5\textwidth}
+
+A SEM allows the specification of a more complex causal structure.
+
+\end{minipage}
+\pause
+\begin{minipage}{0.45\textwidth}
+\begin{figure}[]
+  \centering
+  \includegraphics[width=\textwidth]{../03-graphs/01-02.pdf}
+\end{figure}
+\end{minipage}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Reasons for using SEMs (III)}
+
+\textbf{Statistical}:
+
+\begin{itemize}
+\item ability to model multiple variables simultaneously; \pause
+\item ability to test for measurement invariance across groups;\pause
+\item ability to leverage \textit{latent} variables to account for measurement error.
+\end{itemize}\pause\bigskip
+
+It's a particularly strong tool for those with theories about the dimensionality of concepts, and who have multi-item measures in their data.
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Development of SEMs}
+Draws on two separate traditions:
+
+\begin{itemize}
+\item path modeling, where a system of equations is used to describe functional relations among \textbf{observed} variables \cite{wright_nature_1918, wright_correlation_1921, wright_method_1934}
+\item factor analysis, where one tries to explain the (co-)variation in a set of observed measures with a reduced set of \textbf{latent} variables \cite{tucker_objective_1955}
+\end{itemize}\pause\bigskip
+
+By the 70s, theoretical work had joined these two into the full SEM framework, combining a measurement model with a structural one \cite{joreskog_contributions_1967, joreskog_general_1969, joreskog_general_1973, joreskog_advances_1979}.
+
+\end{frame}
+
+
+
+
+\section{Basic concepts}
+\begin{frame}
+\begin{center}
+\Huge Foundational concepts in SEM
+\end{center}
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Observed vs. latent (I)}
+SEM operates with 2 types of variables:
+
+\begin{itemize}
+\item observed (manifest): the measures for which we have collected data, and which are part of the data file
+\item latent: the theoretical construct which is captured by the indicators we measure
+\end{itemize}\pause\bigskip
+
+\textbf{Example:} anxiety. Many measures, but a common one is the State-Trait Anxiety Inventory, asking for agreement with a series of factual questions: ``I feel jittery'', ``I feel content'', ``I am worried'', ``I am tense'', ``I feel that difficulties are piling up'' etc.\pause\bigskip
+
+Other examples: intelligence, political efficacy, patriotism, homophobia, religiosity.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Observed vs. latent (II)}
+Observed variables can either be continuous or categorical, but in SEM latent variables are \textit{only} continuous.\pause\bigskip
+
+Differences in how they are represented in graphs:
+
+\begin{minipage}{0.45\textwidth}
+\begin{figure}
+\centering
+\begin{tikzpicture}[scale=0.9]
+\node[draw] (O1) at (0,0) {\tiny{$O_1$}};
+\end{tikzpicture}
+\caption{Observed: square or rectangle}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.45\textwidth}
+\begin{figure}
+\centering
+\begin{tikzpicture}[scale=0.9]
+\node[draw, circle, inner sep=2] (L1) at (0,0) {\tiny{$L_1$}};
+\end{tikzpicture}
+\caption{Latent: circle or ellipse}
+\end{figure}
+\end{minipage}\pause\bigskip
+
+Error terms in the model are also depicted with circles or ellipses, as they are (in a sense) latent constructs.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Co-variation \& causality}
+  Two types of relationships are depicted in SEM:
+
+\begin{minipage}{0.45\textwidth}
+\vspace{0.5cm}
+\begin{figure}
+\centering
+\begin{tikzpicture}[scale=0.9]
+\node[draw] (o1) at (0,0) {\tiny{$O_1$}};
+\node[draw] (o2) at (2,0) {\tiny{$O_2$}};
+\draw [->, thin, >=latex] (o1.east)--(o2.west);
+\end{tikzpicture}
+\caption{Directional causal effect}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.45\textwidth}
+\begin{figure}
+\centering
+\begin{tikzpicture}[scale=0.9,>=to]
+\node[draw, circle, inner sep=2] (l1) at (0,0) {\tiny{$L_1$}};
+\node[draw, circle, inner sep=2] (l2) at (2,0) {\tiny{$L_2$}};
+\draw [<->, thin, >=latex] (l1) to[out=60, in=120] (l2);
+\end{tikzpicture}
+\caption{Unanalyzed association}
+\end{figure}
+\end{minipage}\pause\bigskip
+
+Unanalyzed associations (\textit{covariances}) are estimated by the software, but no theory explains them (we don't know \textit{why} they covary).\pause\bigskip
+
+A special type of this is unexplained variance in observed or latent indicators.
+
+\begin{minipage}{0.45\textwidth}
+\vspace{0.5cm}
+\begin{figure}
+\centering
+\begin{tikzpicture}[scale=0.9]
+\node[draw] (o1) at (0,0) {\tiny{$O_1$}};
+\draw[<->, thin, >=latex] (o1) to [out=70,in=110,looseness=7] (o1);
+\end{tikzpicture}
+\end{figure}
+\end{minipage}
+or
+\begin{minipage}{0.45\textwidth}
+\begin{figure}
+\centering
+\begin{tikzpicture}[scale=0.9]
+\node[draw] (o1) at (0,0) {\tiny{$O_1$}};
+\node[draw, circle, inner sep=2] (e1) at (1,0.5) {\tiny{$\epsilon_1$}};
+\draw[<->, thin, >=latex] (e1) to [out=70,in=110,looseness=7] (e1);
+\draw[->, thin, >=latex] (e1) to (o1);
+\end{tikzpicture}
+\end{figure}
+\end{minipage}
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{Exogenous \& Endogenous}
+SEM no longer uses the DV/IV distinction, as a variable can be both outcome and predictor here. Instead:
+
+\begin{minipage}{0.60\textwidth}
+\begin{itemize}
+\item \textit{exogenous}: the causes of which are not included in the model
+\item \textit{endogenous}: which have at least one cause included in the model
+\end{itemize}
+\end{minipage}\pause
+\begin{minipage}{0.35\textwidth}
+\begin{figure}
+\centering
+\begin{tikzpicture}[scale=0.9]
+\node[draw] (o2) at (0,2) {\tiny{$O_2$}};
+\node[draw] (o3) at (3,2) {\tiny{$O_3$}};
+\node[draw] (o1) at (0,0) {\tiny{$O_1$}};
+\draw [->, thin, >=latex] (o1.north)--(o2.south);
+\draw [->, thin, >=latex] (o2.east)--(o3.west);
+\draw [->, thin, >=latex] (o1.north east)--(o3.south west);
+\draw[<->, thin, >=latex] (o2) to [out=70,in=110,looseness=7] (o2);
+\draw[<->, thin, >=latex] (o3) to [out=70,in=110,looseness=7] (o3);
+\draw[<->, thin, >=latex] (o1) to [out=160,in=200,looseness=7] (o1);
+\end{tikzpicture}
+\end{figure}
+\end{minipage}\pause\bigskip
+
+Parameters estimated by the model:
+
+\begin{itemize}
+\item direct effects on endogenous variables
+\item variances and covariances of exogenous variables
+\end{itemize}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Parameters: free, constrained, or fixed}
+SEM offers considerable flexibility in terms of specification; the user can ``turn off'' or ``on'' specific parameters in the model.\pause\bigskip
+
+Parameters:
+
+\begin{itemize}
+\item \textit{free}: the computer estimates this based on the data\pause
+\item \textit{constrained}: estimated by the computer within the bounds specified by the user (equality, proportionality)\pause
+\item \textit{fixed}: the computer accepts the parameter estimate provided by the user, irrespective of how the data looks like
+\end{itemize}\pause\bigskip
+
+Fixing or constraining parameters is a way to address problems with lack of identification based on theory---if $\beta_2 = 0.6*\beta_1$, only $\beta_1$ needs to be estimated.
+
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{Observations \& sample size}
+SEM works by analyzing a variance--covariance matrix of the variables included in the model.\pause\bigskip
+
+The ``ceiling'' in terms of model identification is \textit{not} the sample size, but the off-diagonal elements in this matrix (the \textit{observations}).\pause\bigskip
+
+If $v$ is the number of variables in the model, then we have $\frac{v(v+1)}{2}$ observations ($q$).\pause\bigskip
+
+\begin{equation}
+\centering
+df_M = p - q
+\end{equation}
+
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{Importance of graphical models}
+
+\begin{minipage}{0.50\textwidth}
+Most of the choices discussed above will be presented graphically to your readers (matrix notation is also possible, though complex).\bigskip
+
+Graphics (1) organize knowledge and (2) represent your hypotheses. They also illustrate what parameters are fixed or free.
+\end{minipage}\pause
+\begin{minipage}{0.45\textwidth}
+\begin{figure}
+	\centering
+	\includegraphics{../03-graphs/01-03.pdf}
+\end{figure}
+\end{minipage}
+
+\end{frame}
+
+
+
+
+\section{Factor analysis}
+\begin{frame}
+\begin{center}
+\Huge Measurement component: \textit{factor analysis}
+\end{center}
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{Factor analysis (I)}
+A technique to extract latent \textit{factors} from a set of observed \textit{indicators}---goal to explain variation with a reduced set of dimensions.\pause\bigskip
+
+\begin{figure}
+  \centering
+  \includegraphics[scale=0.8]{../03-graphs/01-04.pdf}
+  \caption{Confirmatory factor analysis (CFA) model}
+\end{figure}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Factor analysis (II)}
+
+\begin{minipage}{0.50\textwidth}
+The association between indicators and factor is called a \textit{factor loading}.\bigskip
+
+The loading represents a regression path from the factor to the corresponding indicator.
+
+\end{minipage}
+\begin{minipage}{0.45\textwidth}
+\begin{figure}
+  \centering
+  \includegraphics{../03-graphs/01-05.pdf}
+\end{figure}
+\end{minipage}\pause\bigskip
+
+The method \textit{decomposes} variance:
+
+\begin{itemize}
+  \item \textit{common} variance between indicators is assumed to be due to the factor
+  \item \textit{unique} variance: composed of specific variance and measurement error
+\end{itemize}
+
+\begin{figure}
+  \centering
+  \includegraphics[scale=0.5]{../03-graphs/01-06.pdf}
+\end{figure}
+
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{Exploratory vs. confirmatory (I)}
+
+\begin{table}
+\centering
+\scriptsize
+\begin{tabular}{p{6.5cm} p{6.5cm}}
+\toprule[0.2em]
+\multicolumn{1}{c}{Exploratory (EFA)} & \multicolumn{1}{c}{Confirmatory (CFA)} \\
+\midrule
+No need to pre-specify number of factors & Must always pre-specify number of factors \\
+Cannot specify correspondence between indicators and factors & Can pre-specify correspondence between indicators and factors \\
+Not identified by default; require \textit{rotation} & Need to be identified before estimating; no \textit{rotation} phase \\
+\bottomrule[0.2em]
+\end{tabular}
+\caption{Differences: EFA vs. CFA \cite{kline_principles_2015}}
+\end{table}\pause\bigskip
+
+EFA is used to determine the dimensionality; CFA is used to confirm a theoretically-defined or hypothesized factorial structure.
+
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{Exploratory vs. confirmatory (II)}
+
+\begin{minipage}{0.475\textwidth}
+\begin{figure}
+  \centering
+  \includegraphics{../03-graphs/01-04.pdf}
+  \caption{Confirmatory (restricted)}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.475\textwidth}
+\begin{figure}
+  \centering
+  \includegraphics{../03-graphs/01-07.pdf}
+  \caption{Exploratory (unrestricted)}
+\end{figure}
+\end{minipage}\pause\bigskip
+
+EFA does not require the estimation of factor covariances, though it is possible.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{EFA: rotation types}
+  EFA also includes a rotation stage before loadings are provided---it serves to increase interpretability.\bigskip
+
+  It reweights the initial solution, so that each extracted factor explains as much variance as possible in a unique set of indicators (it increases \textit{separation}).\pause\bigskip
+
+  Types:
+
+  \begin{itemize}
+  \item orthogonal: factors are uncorrelated (e.g. \textit{varimax} rotation)
+  \item oblique: factors will be correlated (e.g. \textit{promax} rotation)
+  \end{itemize}
+
+  \textbf{Keep in mind}: CFA requires no rotation, as there you're already specifying the number of factors to extract.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Exploratory vs. confirmatory (III)}
+  In practice, the border between EFA and CFA is fuzzy.\bigskip
+
+  It happens that a confirmatory specification doesn't fit data well, and needs adjustment.\pause\bigskip
+
+  In EFA we frequently decide to take only the first $k$ factors based on how much ``sense'' they make (which is where theory plays a role).
+
+\end{frame}
+
+
+\section{Data demonstration I}
+\begin{frame}
+\begin{center}
+\Huge Data interlude (I)
+\end{center}
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Political efficacy}
+  Let's take a short example: ANES 1987 pilot study. We're interested in people's sense of political efficacy ($N=351$).\pause\bigskip
+
+  Multiple indicators available:
+
+  \begin{itemize}
+  \scriptsize
+  \item \textsf{A38a}: I consider myself well-qualified to participate in politics
+  \item \textsf{A38b}: I have good understanding of important political issues
+  \item \textsf{A38c}: Other people seem to understand complicated political issues easier than I do
+  \item \textsf{A38e}: I often don't feel sure of myself when talking with other people about politics
+  \item \textsf{\dots}: \dots
+  \item \textsf{A15c}: Most officials can be trusted to do what is right without having to constantly check on them
+  \item \textsf{A15d}: Most officials are truly interested in what the people think
+  \item \textsf{A15e}: Candidates for office are only interested in people's votes, not in their opinions
+  \end{itemize}
+
+<<factor-analysis-1, echo=FALSE>>=
+anesDF <- readRDS("../02-data/04-practice-data-ANES.rds")
+@
+
+<<factor-analysis-2, eval=FALSE>>=
+faDF <- anesDF %>%
+  na.omit()
+
+# Create the covariance matrix between items
+round(cov(faDF), digits = 2)
+@
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Observations: covariance matrix}
+
+\begin{table}
+\centering
+\scriptsize
+\begin{tabular}{l c c c c c c c c c c c c c}
+\toprule[0.2em]
+     & a38a & a38b & a38c & a38d & a38e & a38f & a15a & a15b & a15c & a15d & a15e & a15f & a15g \\
+\midrule
+a38a &  2.05 & 0.93 & 0.46 & 1.12 & 0.76 & 0.75 &  0.08 & -0.04 &  0.05 &  0.12 & 0.16 & 0.09 &  0.14 \\
+a38b &  0.93 & 1.42 & 0.30 & 0.74 & 0.53 & 0.76 &  0.02 & -0.10 &  0.16 &  0.09 & 0.06 & 0.05 &  0.07 \\
+a38c &  0.46 & 0.30 & 1.75 & 0.57 & 0.84 & 0.43 & -0.18 &  0.15 & -0.12 &  0.02 & 0.24 & 0.31 &  0.27 \\
+a38d &  1.12 & 0.74 & 0.57 & 2.00 & 0.77 & 0.75 & -0.09 & -0.02 & -0.14 & -0.10 & 0.03 & 0.06 & -0.04 \\
+a38e &  0.76 & 0.53 & 0.84 & 0.77 & 2.00 & 0.66 & -0.11 &  0.11 & -0.16 &  0.03 & 0.24 & 0.23 &  0.18 \\
+a38f &  0.75 & 0.76 & 0.43 & 0.75 & 0.66 & 1.81 & -0.03 & -0.03 &  0.02 &  0.04 & 0.14 & 0.17 &  0.13 \\
+a15a &  0.08 & 0.02 & -0.18 & -0.09 & -0.11 & -0.03 & 1.07 & 0.15 & 0.43 & 0.45 & 0.14 & 0.15 & 0.24 \\
+a15b & -0.04 & -0.10 & 0.15 & -0.02 &  0.11 & -0.03 & 0.15 & 0.79 & 0.20 & 0.22 & 0.34 & 0.49 & 0.37 \\
+a15c &  0.05 & 0.16 & -0.12 & -0.14 & -0.16 &  0.02 & 0.43 & 0.20 & 1.51 & 0.53 & 0.22 & 0.40 & 0.22 \\
+a15d &  0.12 & 0.09 & 0.02 & -0.10 & 0.03 & 0.04 & 0.45 & 0.22 & 0.53 & 1.13 & 0.40 & 0.36 & 0.40 \\
+a15e &  0.16 & 0.06 & 0.24 &  0.03 & 0.24 & 0.14 & 0.14 & 0.34 & 0.22 & 0.40 & 1.60 & 0.65 & 0.61 \\
+a15f &  0.09 & 0.05 & 0.31 &  0.06 & 0.23 & 0.17 & 0.15 & 0.49 & 0.40 & 0.36 & 0.65 & 1.29 & 0.76 \\
+a15g &  0.14 & 0.07 & 0.27 & -0.04 & 0.18 & 0.13 & 0.24 & 0.37 & 0.22 & 0.40 & 0.61 & 0.76 & 1.30 \\
+\bottomrule[0.2em]
+\end{tabular}
+\end{table}
+
+\end{frame}
+
+\begin{frame}
+  \frametitle{EFA: Factor loadings}
+
+<<factor-analysis-3, eval=FALSE>>=
+f1 <- fa(r = faDF,
+         nfactors = 5,
+         rotate = "oblimin")
+@
+
+\begin{table}
+\centering
+\scriptsize
+\begin{tabular}{l c c c c c}
+\toprule[0.2em]
+     &   MR2 &   MR1 &   MR3 &   MR4 &   MR5 \\
+\midrule
+a38a & -0.04 &  0.39 &  0.12 &  0.29 &  0.17  \\
+a38b &  0.00 &  0.88 &  0.00 &  0.00 & -0.01  \\
+a38c &  0.15 & -0.02 & -0.11 &  0.05 &  0.53  \\
+a38d &  0.01 &  0.00 & -0.01 &  1.00 &  0.00  \\
+a38e & -0.04 &  0.05 &  0.01 &  0.02 &  0.75  \\
+a38f &  0.06 &  0.43 & -0.04 &  0.09 &  0.18  \\
+a15a & -0.07 & -0.04 &  0.64 &  0.06 & -0.07  \\
+a15b &  0.49 & -0.20 &  0.12 &  0.05 &  0.07  \\
+a15c &  0.12 &  0.14 &  0.47 & -0.02 & -0.18  \\
+a15d &  0.08 &  0.00 &  0.68 & -0.06 &  0.09  \\
+a15e &  0.48 &  0.00 &  0.10 & -0.04 &  0.11  \\
+a15f &  0.90 &  0.02 & -0.04 &  0.02 & -0.04  \\
+a15g &  0.62 &  0.03 &  0.10 & -0.07 &  0.07  \\
+\bottomrule[0.2em]
+\end{tabular}
+\caption{Pattern matrix with standardized loadings}
+\end{table}
+
+Every possible factor loading (\textit{pattern coefficient}) is estimated in this setup.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{EFA: continuation}
+
+Some software takes a \textit{stepwise} approach, and sequentially tests the fit with the data for a solution with 1, 2, 3, \dots factors.\pause\bigskip
+
+It's up to the user, then, to select which of the solutions make more sense based on theory.\pause\bigskip
+
+Here, though, the full solution is given, leaving perhaps the confirmatory step for another data set (or the second split half of data).
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{CFA: theory testing}
+  If we have a pretty good idea of which factors we can extract, based on theory, we can go directly to \textit{confirmatory} factor analysis.\pause\bigskip
+
+\begin{table}
+\centering
+\scriptsize
+\begin{tabular}{p{6.5cm} p{6.5cm}}
+\toprule[0.2em]
+\multicolumn{1}{c}{Internal} & \multicolumn{1}{c}{External} \\
+\midrule
+Believe well-qualified to participate             & Politicians well-qualified \\
+Good understanding of political issues            & Politicians not as honest as voters deserve \\
+Others comprehend politics easier than I do       & Public officials can be trusted to do right \\
+I could do a good job in office                   & Public officials truly interested in what people think\\
+Not sure of myself when talking politics          & Candidates interested only in votes, not opinions \\
+I'm equally well-informed about politics as most  & Many politicians think they are masters, not servants \\
+                                                  & Elected officials lose touch pretty quickly \\
+\bottomrule[0.2em]
+\end{tabular}
+\caption{Internal vs. external political efficacy}
+\end{table}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{CFA: two factors}
+
+<<factor-analysis-4, eval=FALSE>>=
+# For this one, we use "lavaan"
+f2 <- 'internal =~ a38a + a38b + a38c + a38d + a38e + a38f
+       external =~ a15a + a15b + a15c + a15d + a15e + a15f + a15g'
+
+f2.fit <- cfa(model = f2,
+              data = faDF,
+              ordered = TRUE,
+              std.lv = TRUE)
+
+pdf("../03-graphs/01-08.pdf", height = 6, width = 10)
+semPaths(f2.fit, what = "est",
+         intercepts = FALSE,
+         thresholds = FALSE)
+dev.off()
+
+pdf("../03-graphs/01-08.pdf", height = 6, width = 10)
+semPaths(f2.fit, what = "est",
+         thresholds = FALSE)
+dev.off()
+@
+
+
+\begin{figure}
+\centering
+\includegraphics[scale=0.5]{../03-graphs/01-08.pdf}
+\end{figure}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Deciding among solutions}
+  How to choose whether a 1-factor or 2-factor solution is better? Is it all up to the user?\pause\bigskip
+
+  Not entirely: can use \textit{model fit criteria} to decide among solutions.\pause\bigskip
+
+  We cover these in tomorrow's ``full'' SEM session.
+
+<<factor-analysis-5, eval=FALSE>>=
+f1 <- 'eff =~ a38a + a38b + a38c + a38d + a38e + a38f + a15a + a15b + a15c + a15d + a15e + a15f + a15g'
+
+f1.fit <- cfa(model = f1,
+              data = faDF,
+              ordered = TRUE,
+              std.lv = TRUE)
+summary(compareFit(f2.fit, f1.fit))
+rm(f1, f2, f1.fit, f2.fit, faDF)
+@
+
+\begin{table}
+\centering
+\scriptsize
+\begin{tabular}{l c c c c c c c}
+  \toprule[0.2em]
+  & $\chi^2$ scaled & DF scaled & \textit{p} scaled & RMSEA scaled  & CFI scaled  & TLI scaled  & SRMR \\
+  \midrule
+  2F  & 344.11  & 64  & .000  & .112  & .883 & .858 & .093 \\
+  1F  & 1254.27 & 65  & .000  & .229  & .504  & .404  & .200 \\
+  \bottomrule[0.2em]
+\end{tabular}
+\end{table}
+
+\end{frame}
+
+
+\section{Path analysis}
+\begin{frame}
+\begin{center}
+\Huge Structural component: \textit{path analysis}
+\end{center}
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Basic features}
+  A system of equations \textit{using only observed variables} that together specify a complex set of causal linkages.\pause\bigskip
+
+  This system has at least 2 \textit{endogenous} variables and at least 1 \textit{exogenous} one.
+
+\begin{minipage}{0.475\textwidth}
+\begin{figure}
+\centering
+\vspace{1.8cm}
+\begin{tikzpicture}
+\node[draw, inner sep=2pt] (x1) at (0,0) {$X_1$};
+\node[draw=none] (x2) at (2.5,0) {$\dots$};
+\draw[<->, >=latex] (x1) to [out=70,in=110,looseness=7] (x1);
+\draw[->, >=latex] (x1) -- (x2);
+\end{tikzpicture}
+\caption{Exogenous}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.475\textwidth}
+\begin{figure}
+\centering
+\begin{tikzpicture}
+\node[draw, inner sep=2pt] (y) at (2.5,0) {$Y$};
+\node[draw=none] (x1) at (0,0) {$\dots$};
+\node[draw, circle, inner sep=2pt] (e) at (3.5,1) {$D$};
+\draw[<->, >=latex] (e) to [out=70,in=110,looseness=7] (e);
+\draw[->, >=latex] (x1) -- (y);
+\draw[->, >=latex] (e) -- (y) node[midway, above] {1};
+\end{tikzpicture}
+\caption{Endogenous}
+\end{figure}
+\end{minipage}
+
+Every endogenous variable has a disturbance (denoted here with $D$)---unexplained variation.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Pared down example}
+
+\begin{minipage}{0.475\textwidth}
+\begin{figure}
+\centering
+\includegraphics{../03-graphs/01-11.pdf}
+\end{figure}
+\end{minipage}\pause
+\begin{minipage}{0.475\textwidth}
+2 endogenous variables: $EFF$ and $PRT$; 1 exogenous one: $EDU$.\pause\bigskip
+
+Needn't use SEM to get estimates of $\beta$s; could use the Baron \& Kenny approach (\url{http://davidakenny.net/cm/mediate.htm}).\pause\bigskip
+
+For more complex configurations, though, a SEM approach will save considerable time.
+
+\end{minipage}
+
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Latent scales (I)}
+  Just as in the case of a factor, disturbances are also considered latent variables (have to be estimated).\pause\bigskip
+
+\begin{minipage}{0.375\textwidth}
+\begin{figure}
+\centering
+\begin{tikzpicture}
+\node[draw, inner sep=2pt] (y) at (2.5,0) {$Y$};
+\node[draw=none] (x1) at (0,0) {$\dots$};
+\node[draw, circle, inner sep=2pt] (e) at (3.5,1) {$D$};
+\draw[<->, >=latex] (e) to [out=70,in=110,looseness=7] (e);
+\draw[->, >=latex] (x1) -- (y);
+\draw[->, >=latex] (e) -- (y) node[midway, above] {1};
+\end{tikzpicture}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.575\textwidth}
+The $1$ is a \textit{scaling constant}; needed because latent variables have no inherent scale, so one needs to be imposed before estimating things about $D$.\pause\bigskip
+
+This was also the case for EFA/CFA earlier, though it wasn't depicted yet on plots for the sake of simplicity.
+\end{minipage}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Latent scales (II)}
+
+
+\begin{minipage}{0.425\textwidth}
+\begin{figure}
+\centering
+\includegraphics[scale=0.8]{../03-graphs/01-09.pdf}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.525\textwidth}
+The scale of $E$s has to be fixed to 1. What about $A$ and $B$?\bigskip
+
+Two strategies:\pause
+
+\begin{itemize}
+  \item set constraint on a unstandardized factor loading, e.g. $\lambda_{11} = \lambda_{42}=1$ (what we did for $E$s; also called a \textbf{unit loading identification} (ULI) \textbf{constraint})\pause
+  \item set constraint on their variances, e.g. $\phi_{11} = \phi_{22}=1$ (also called a \textbf{unit variance identification} (UVI) \textbf{constraint})
+\end{itemize}
+
+\end{minipage}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Stages in the analysis \cite{kline_principles_2015}}
+
+\begin{figure}
+\centering
+\includegraphics[scale=0.6]{../03-graphs/01-10.pdf}
+\end{figure}
+
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{Identification of path models (I)}
+  To very general rules:
+
+  \begin{itemize}
+    \item $df_{M} > 0$ (\textit{counting rule})\pause
+    \item Every disturbance must be assigned a scale (see UVI above)
+  \end{itemize}\pause\bigskip
+
+  If $df_{M} <= 0$, the model is \textbf{underidentified}.\bigskip
+
+  \textbf{Keep in mind}: what matters is \textit{not} sample size, but number of observations in the variance--covariance matrix.\pause\bigskip
+
+  $a + b = 6$ is insufficient, but the following works (\textbf{just-identified}):
+
+  \begin{equation}
+  \begin{cases}
+  a + b = 6 \\
+  2a + b = 10
+  \end{cases}
+  \end{equation}
+
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Identification of path models (II)}
+  Two broad categories:
+
+  \begin{itemize}
+    \item \textbf{recursive}: (1) disturbances are uncorrelated; (2) causal effects are unidirectional
+    \item \textbf{non-recursive}: either (1) or (2) (or both) no longer apply
+  \end{itemize}\pause\bigskip
+
+
+\begin{minipage}{0.315\textwidth}
+\begin{figure}
+\centering
+\includegraphics[scale=0.8]{../03-graphs/01-12a.pdf}
+\caption{Recursive}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.315\textwidth}
+\begin{figure}
+\centering
+\includegraphics[scale=0.5]{../03-graphs/01-12b.pdf}
+\caption{Non-recursive}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.315\textwidth}
+\begin{figure}
+\centering
+\includegraphics[scale=0.5]{../03-graphs/01-12c.pdf}
+\caption{(Partially) recursive}
+\end{figure}
+\end{minipage}
+
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Identification of path models (III)}
+  \textbf{Good news}: recursive path models are identified.\pause\bigskip
+
+  Much harder to say for non-recursive path models---see \citeA[pp.152--155]{kline_principles_2015} for a set of rules.\pause\bigskip
+
+  Strategies for non-identified non-recursive models:
+
+  \begin{enumerate}
+    \item Drop paths (increases $df_{M}$)\pause
+    \item Enforce parameter constraints, e.g. equality on bi-directional pathways\pause
+    \item Add instruments for each endogenous variable in a non-recursive link
+  \end{enumerate}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Mediation (I)}
+  If you remember from our January workshop, \textit{moderation} simply refers to \textit{effect heterogeneity}: $\beta_{XY}$ varies depending on a third variable.\pause\bigskip
+
+  \textit{Mediation} is a causal concept, with deeper implications: effect \textit{passes through} another variable on its way to the outcome.
+
+\begin{figure}
+\centering
+\includegraphics{../03-graphs/01-11.pdf}
+\end{figure}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Mediation (II)}
+  Main challenge: without longitudinal data, or an experimental design, it's hard to show the $X \rightarrow M \rightarrow Y$ sequence.\pause\bigskip
+
+\begin{minipage}{0.475\textwidth}
+\begin{figure}
+\centering
+\includegraphics[scale=0.8]{../03-graphs/01-11.pdf}
+\end{figure}
+\end{minipage}
+\begin{minipage}{0.475\textwidth}
+Direct effect: $\beta_{xy}$\bigskip
+
+Indirect effect: $\beta_{xm} * \beta_{my}$\bigskip
+
+Total effect = direct + indirect
+
+\end{minipage}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Configurations}
+
+  \begin{columns}
+  \begin{column}{0.32\textwidth}
+  \footnotesize
+  If $\beta_{xy} \approx 0$ and $\beta_{xm}\beta_{my} \neq 0$: full mediation.\bigskip
+
+  \begin{figure}
+  \begin{tikzpicture}[->,
+			>=stealth',
+			shorten >=1pt,
+			auto,
+			thick,
+			scale = 0.4]
+
+			\draw[fill=black, draw=black] (0,0) circle (0.5ex) node (a) [below, yshift=-0.2cm] {\tiny{\texttt{EDU}}};
+			\draw[fill=black, draw=black] (6,0) circle (0.5ex) node (b) [below, yshift=-0.2cm] {\tiny{\texttt{PRT}}};
+			\draw[fill=black, draw=black] (3, 2.5) circle (0.5ex) node (c) [above] {\tiny{\texttt{EFF}}};
+			\draw[->, orange] (0.1,0.1) -- (2.92,2.43);
+			\draw[->, orange] (3.13,2.44) -- (5.92,0.07);
+			\end{tikzpicture}
+	\end{figure}
+  \end{column}
+  \begin{column}{.01\textwidth}
+  \rule{.2mm}{.8\textheight}
+  \end{column}
+  \begin{column}{0.32\textwidth}
+  \footnotesize
+
+  If $\beta_{xy} \neq 0$ and $\beta_{xm}\beta_{my} \approx 0$: no mediation.\bigskip
+
+  \begin{figure}
+  \begin{tikzpicture}[->,
+			>=stealth',
+			shorten >=1pt,
+			auto,
+			thick,
+			scale = 0.4]
+
+			\draw[fill=black, draw=black] (0,0) circle (0.5ex) node (a) [below, yshift=-0.2cm] {\tiny{\texttt{EDU}}};
+			\draw[fill=black, draw=black] (6,0) circle (0.5ex) node (b) [below, yshift=-0.2cm] {\tiny{\texttt{PRT}}};
+			\draw[fill=black, draw=black] (3, 2.5) circle (0.5ex) node (c) [above] {\tiny{\texttt{EFF}}};
+			\draw[->, black] (0,0) -- (5.92,0);
+			\end{tikzpicture}
+	\end{figure}
+  \end{column}
+
+  \begin{column}{.01\textwidth}
+  \rule{.2mm}{.8\textheight}
+  \end{column}
+  \begin{column}{0.32\textwidth}
+  \footnotesize
+
+  If $\beta_{xy} \neq 0$ and $\beta_{xm}\beta_{my} \neq 0$: partial mediation.\bigskip
+
+  \begin{figure}
+  \begin{tikzpicture}[->,
+			>=stealth',
+			shorten >=1pt,
+			auto,
+			thick,
+			scale = 0.4]
+
+			\draw[fill=black, draw=black] (0,0) circle (0.5ex) node (a) [below, yshift=-0.2cm] {\tiny{\texttt{EDU}}};
+			\draw[fill=black, draw=black] (6,0) circle (0.5ex) node (b) [below, yshift=-0.2cm] {\tiny{\texttt{PRT}}};
+			\draw[fill=black, draw=black] (3, 2.5) circle (0.5ex) node (c) [above] {\tiny{\texttt{EFF}}};
+			\draw[->, black] (0,0) -- (5.92,0);
+			\draw[->, orange] (0.1,0.1) -- (2.93,2.44);
+			\draw[->, orange] (3.13,2.44) -- (5.92,0.07);
+			\end{tikzpicture}
+	\end{figure}
+  \end{column}
+
+  \end{columns}
+
+\end{frame}
+
+
+
+\section{Data demonstration II}
+\begin{frame}
+\begin{center}
+\Huge Data interlude (II)
+\end{center}
+\end{frame}
+
+
+\begin{frame}
+\frametitle{JOBS II program}
+The JOBS II was a field experiment in Southeast Michigan in early 1990s.\bigskip
+
+Treatment was a job-search skills seminar administered to unemployed persons. Control was a booklet with search tips.\bigskip
+\pause
+
+Expected effects:
+
+\begin{itemize}
+  \item increased employment\pause
+  \item increased self-confidence $\Rightarrow$ decreased depression
+\end{itemize}
+
+\end{frame}
+
+
+\begin{frame}
+\frametitle{JOBS II program}
+
+\begin{figure}
+\begin{tikzpicture}[->,
+			>=stealth',
+			shorten >=1pt,
+			auto,
+			thick]
+
+			\draw[fill=black, draw=black] (0,0) circle (0.5ex) node (a) [below, yshift=-0.2cm] {\large\texttt{Seminar}};
+			\draw[fill=black, draw=black] (6,0) circle (0.5ex) node (b) [below, yshift=-0.2cm] {\large\texttt{Depression}};
+			\draw[fill=black, draw=black] (3, 2.5) circle (0.5ex) node (c) [above] {\large\texttt{Confidence}};
+			\draw[->, black] (0,0) -- (5.92,0);
+			\draw[->, orange] (0.1,0.1) -- (2.93,2.44);
+			\draw[->, orange] (3.13,2.44) -- (5.92,0.07);
+			\end{tikzpicture}
+\end{figure}
+
+How much of the effect of the program on depression is \textit{transmitted} through improved self-confidence?
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{JOBS II data}
+  Outcome: continuous, score on Hopkins Symptom Checklist, measured 6 months after treatment.\bigskip
+
+  Mediator: job search self-efficacy, measured 2 months after treatment.\bigskip
+  \pause
+
+  Covariates: age, gender, ethnic minority, depression measured during treatment, economic hardship. Step-by-step approach (pre-SEM):
+  \pause
+
+<<r read-data>>=
+jobsDF <- read.dta13(file = "../02-data/05-Jobs-NoMiss-Cont.dta",
+                     convert.factors = FALSE)
+jobsDF <- jobsDF %>%
+  mutate(educ = as.factor(educ),
+         sex = as.factor(sex),
+         nonwhite = as.factor(nonwhite),
+         marital = as.factor(marital),
+         occp = as.factor(occp),
+         income = as.factor(income))
+
+@
+
+ \footnotesize
+   \begin{align}
+   Depression_i &= \alpha_1 + \beta_1\overbrace{Seminar_i}^{treatment} + \zeta_1X_i + \epsilon_{i1} \\
+   Confidence_i &= \alpha_2 + \beta_2Seminar_i + \zeta_2X_i + \epsilon_{i2}\\
+   Depression_i &= \alpha_3 + \gamma Seminar_i + \beta_3\underbrace{Confidence_i}_{mediator} + \zeta_3X_i + \epsilon_{i3}
+   \end{align}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Results}
+
+<<r path-results, eval = FALSE>>=
+model <- ' # direct effect
+             depress2 ~ c*treat_num + depress1 + age + sex + nonwhite + econ_hard
+           # mediator
+             job_seek~ a*treat_num + depress1 + age + sex + nonwhite + econ_hard
+             depress2 ~ b*job_seek 
+           # indirect effect (a*b)
+             ab := a*b
+           # total effect
+             total := c + (a*b)'
+
+fit <- sem(model, data = jobsDF)
+summary(fit)
+@
+
+\begin{figure}
+\begin{tikzpicture}[->,
+	>=stealth',
+	shorten >=1pt,
+	auto,
+	thick]
+\draw[fill=black, draw=black] (0,3) circle (0.5ex) node (a) [below, yshift=-0.2cm, xshift=-0.4cm] {\large Seminar};
+\draw[fill=black, draw=black] (6,3) circle (0.5ex) node (b) [below, yshift=-0.2cm, xshift=0.75cm] {\large Depression};
+\draw[fill=black, draw=black] (3, 5.5) circle (0.5ex) node (m) [above] {\large Confidence};
+\draw[fill=black, draw=black] (3, 1.5) circle (0.75ex) node (c) [below] {Controls};
+\draw[->, black] (0,3) -- (5.92,3) node[midway, above] {\tiny{$-0.031 (0.035)$}};
+\draw[->, orange] (0.1,3.1) -- (2.93,5.44) node[midway, above, rotate=40] {\tiny{$0.095 (0.043)^*$}};
+\draw[->, orange] (3.13,5.44) -- (5.92,3.07) node[midway, above, rotate=-40] {\tiny{$-0.156 (0.022)^{***}$}};
+\draw[->, black, dashed] (3.00,1.56) -- (3,5.45);
+\draw[->, black, dashed] (3.04,1.54) -- (5.96,2.96);
+\end{tikzpicture}
+\caption{Standard path analysis through the \textsf{sem()} function in \textsf{lavaan}}
+\end{figure}
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Interpreting estimates}
+  Coefficients interpreted as for a standard regression model: $\beta$ quantifies change in $Y$ resulting from 1-unit change in $X$.\pause\bigskip
+
+  For standardized coefficients, the interpretation changes to standard deviation units.\pause\bigskip
+
+  \textit{Indirect effect} has similar interpretation: change in $Y$ from 1-unit change in $X$ transmitted through changes in the mediator.
+\end{frame}
+  
+
+\begin{frame}
+  \frametitle{Computing effects}
+
+\begin{table}
+\footnotesize
+\begin{tabular}{l D{.}{.}{4.6} D{.}{.}{4.6}}
+\toprule
+  & \multicolumn{1}{c}{Direct} & \multicolumn{1}{c}{Indirect} \\
+\midrule
+$\beta$ & -0.031 & -0.015^{*} \\
+SE  &  (0.035) & (0.007) \\
+\bottomrule
+\end{tabular}
+\end{table}
+\pause
+
+Total effect: $\beta_{total} = -0.046 (0.035)$.\pause\bigskip
+
+A case of pure mediation: a negative indirect effect of seminar attendance on depression (via confidence).
+
+\end{frame}
+
+
+% FRAME
+\begin{frame}
+\begin{center}
+    \Huge Thank \textcolor{title}{you} for the kind attention!
+\end{center}
+\end{frame}
+
+% REFERENCES
+
+\begin{frame}[allowframebreaks]
+\frametitle{References}
+\bibliographystyle{apacite}
+\bibliography{Bibliography}
+\end{frame}
+
+\end{document}

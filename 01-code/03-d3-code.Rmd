@@ -1,0 +1,308 @@
+---
+title: "SEM workshop: Day 3 code"
+author: "Constantin Manuel Bosancianu"
+date: "`r format(Sys.time(), '%B %d, %Y | %H:%M:%S | %Z')`"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: false
+    code_folding: hide
+    highlight: pygments
+bibliography: ../04-slides/Bibliography.bib
+---
+
+# Introduction
+
+Welcome to day 3 of our SEM workshop! We now have to make switch from yesterday and devote all of our time to a new type of specification: the multilevel SEM. You'll see, however, that we borrow a lot of the insights from the previous two days in terms of how we write out the syntax for the models, how we interpret some of the statistical output, and how we assess model fit for the specifications we're evaluating.
+
+The set-up of the code file is the same as yesterday, with chunks of code in between paragraphs of explanation. If you feel the need to, please add to the text your own observations--whatever helps you remember what an argument does in a function etc.
+
+Finally, I should say that I'm very grateful to [Yves Rosseel](https://users.ugent.be/~yrosseel/)--first, for the entire work on the **lavaan** package, and second, for coding some of these features 2 years ago based on a request from a research team that I was part of.
+
+# Loading packages
+In this part of the code file I simply load the packages we're going to use, using the same function from the previous two days. Unlike on Monday, though, this will work much faster, since all of the packages should already be installed on your computer.
+
+```{r setup-packages, warning=FALSE, message=FALSE, comment=NA, results='hide'}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      error = FALSE,
+                      comment = NA,
+                      message = FALSE)
+
+check.packages <- function(pkg){
+    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+    if (length(new.pkg))
+        install.packages(new.pkg, dependencies = TRUE,
+                         repos = "https://cran.rstudio.com")
+    sapply(pkg, require, character.only = TRUE)
+}
+
+# The list of packages that should be checked.
+pkg.list <- c("tidyverse","scales","texreg","broom",
+              "kableExtra","lavaan","psych","semPlot",
+              "semTools","haven")
+check.packages(pkg.list)
+```
+
+
+# Multilevel path models
+
+We start with an example of how to run a path model in a multilevel setting. Our demonstration data comes from wave 4 of the *World Values Surveys*, where we're trying to better understand the drivers of variation in citizens' self-expression values (this is an indicator that comes pre-calculated in the WVS data). Though seemingly unimportant, this indicator holds a key role in a theoretical account that sees development impacting democracy by means of the self-expression values that economic prosperity brings about in the population [@inglehart_how_2009]. The question at hand is: who are the individuals who are more likely to espouse such self-expression values?
+
+An odd feature of the data you have on Moodle is that it comes without variable names, so before we can use it we have to assign names to the columns.^[The reason for this is that the data was also used for **Mplus**, and this software only accepts data files that do not contain variable names.]
+
+```{r mpm-read-data}
+wvsDF <- read_csv(file = "../02-data/07-WVS-wave4.csv",
+                  col_names = FALSE)
+wvsDF <- wvsDF %>% 
+  rename(country = 1,
+         year = 2,
+         sev = 3,
+         inc = 4,
+         edu = 5,
+         age = 6,
+         gini = 7,
+         gdp = 8)
+```
+
+Here is a small codebook for the data:
+
+1. `country`: country from which observation was taken;
+2. `year`: year in which survey was conducted;
+3. `sev`: self-expression values (attitudes that place a high degree of importance on civic activism, subjective well-being, tolerance and trust, personal autonomy, and choice);
+4. `inc`: ordinal scale from 1 to 10, designating the country-specific income decile in which the individual fits;
+5. `edu`: highest level of education achieved, ranging from 1 ("incomplete primary") to 8 ("bachelors' degree or higher");
+6. `age`: age in decades, rescaled so that 0 designates someone who is 1.5 decades old (15 years old);
+7. `gini`: Gini index of net income inequality sourced from the SWIID data [@solt_measuring_2020], measured in 10-point units;
+8. `gdp`: GDP per capita, PPP, expressed in 1,000s of current international USD.
+
+There is not much to clean on the data, but I will do a small transformation on GDP per capita by taking the logarithm of the value expressed back in USD.
+
+```{r mpm-clean-data}
+wvsDF <- wvsDF %>% 
+  mutate(gdp_log = log(gdp*1000)) %>% 
+  dplyr::select(-gdp)
+```
+
+## Initial model
+It would be easy to estimate the same kind of path model we tried during our first session on Monday.
+
+```{r path-ignore-clustering, cache=TRUE}
+tempDF <- wvsDF %>% 
+  dplyr::select(country, sev, inc, edu, age) %>% 
+  na.omit()
+
+model1 <- ' # regressions
+            sev ~ edu + inc + age
+            edu ~ age
+            inc ~ edu'
+
+path1.fit <- sem(model = model1,
+                 data = tempDF)
+summary(path1.fit, fit.measures = TRUE)
+```
+
+Notice that this is a **over-identified** model, since there is 1 degree of freedom: we've estimated almost every path we could. Looking at the path coefficients, though, in addition to the significant effects across the board, we have to also recognize that we're estimating effects in a very precise way. All standard error estimates are extremely small, due to the sample size of over 42,000 respondents.
+
+```{r path-no-clustering-plot, fig.height=6, fig.width=8, fig.align='center'}
+# Unfortunately, plotting the residual variances as well skewed the color
+# scale so much that a few of the arrows were no longer visible.
+semPaths(path1.fit, what = "est",
+         edge.label.cex=0.9,
+         layout = "circle",
+         edge.color = "black",
+         residuals = FALSE)
+```
+
+Nevertheless, the way we've estimated the model so far completely ignores the fact that respondents from the same country are likely to be more similar to each other than 2 respondents randomly selected from different countries. Although the standard errors are derived under the assumption that we have over 42,000 of pieces of unique information, our effective sample size is smaller than this due to this clustering in the data.
+
+## Random intercepts path model
+But what would happen if we adequately took this clustering into account, by running this specification as a multilevel path model? In addition to the statistical benefits (getting more precise estimates of the SEs), we can also test a whole new class of propositions, e.g. does GDP have an effect on self-expression values, even after controlling for its Level-1 determinants?
+
+```{r mpm-clustering, cache=TRUE}
+tempDF <- wvsDF %>% 
+  dplyr::select(country, sev, inc, edu, age, gdp_log) %>% 
+  na.omit()
+
+model2 <- '# regressions
+           level: 1
+             edu ~ xm*age
+             sev ~ my*edu + age + inc
+             inc ~ edu
+ 
+           level: 2
+             sev ~ gdp_log
+             edu ~ zm*gdp_log
+  
+           # defined parameters
+           ie := xm * my
+           clm := zm * my '
+
+path2.fit <- sem(model2, 
+                 data = tempDF, 
+                 cluster = "country")
+summary(path2.fit, fit.measures = TRUE)
+```
+
+Notice how the two levels of the model are specified in two different blocks. We also use the same trick as in the previous days to label specific paths, and then use those labels to construct custom-defined parameters, such as indirect effects.
+
+After fitting the model you can also inspect the intra-class correlations for the items at the level-1.
+
+```{r mpm-examine-icc}
+lavInspect(path2.fit, "icc")
+```
+
+We only get estimates for 2 of the 4 indicators because these were the only ones whose intercepts we allowed to randomly vary across countries.
+
+Produce within and between covariance matrices for estimated parameters.
+
+```{r mpm-examine-h1}
+lavInspect(path2.fit, "h1")
+```
+
+
+
+
+
+# Multilevel factor analysis
+The data used in this section comes from the 2015 wave of the PISA study (Program for International Student Assessment); for this demonstration, only the data from the Dominican Republic was selected. The PISA does a cross-national measurement of 15 year olds' ability in science, reading, and math (and, more recently, collaborative problem solving). It merges these test score results with additional information gathered by means of surveys from students, parents, teachers, and principals. Even though we selected a single country our example remains a multilevel one, as schools are first sampled from around the country, and from each school students are randomly sampled. In our case, after performing listwise deletion on a small set of variables, we're left with 3,203 students from 186 schools.
+
+We focus more intensely here on students' Internet use, which in this case can be either for educational or recreational purposes. In addition to testing this simple dimensionality, we might also care to know whether there are differences in Internet use across the schools and whether the type of usage (educational vs. entertainment) varies across schools as well. To investigate this we use here 6 indicators collected via the student survey, and which deal with the frequency of use of electronic devices and of Internet outside of the school. All are measured on 5-point scales which vary from *never or hardly ever* all the way to *every day*, which I treat here as continuous given that the example is for demonstration purposes.
+
+```{r mfa-read-data, results='asis'}
+pisaDF <- read_csv(file = "../02-data/08-PISA-DomRep.csv",
+                   col_names = FALSE)
+# Create a small custom function for recoding
+rec999 <- function(x) {
+  x[x==-999] <- NA_real_
+  x
+}
+
+pisaDF <- pisaDF %>% 
+  rename(schoolid = 1,
+         vid = 2,
+         dl1 = 3,
+         dl2 = 4,
+         isc = 5,
+         ils = 6,
+         hwk = 7) %>% 
+  mutate_at(.vars = vars(vid:hwk),
+            .funs = rec999)
+```
+
+As with the previous example, I first have ho assign variable names to the data set, as these were not found in the data. Because -999 was used as an indicator for missing data, I also had to recode this to missing first. We end up with a data set that has a pretty familiar structure.
+
+```{r mfa-show-data, results='asis'}
+pisaDF %>% 
+  slice(1:15) %>% 
+  kable(caption = "First 15 rows of data",
+        row.names = FALSE) %>% 
+  kable_minimal()
+```
+
+Here is a small codebook for the data:
+
+1. `schoolid`: school ID;
+2. `vid`: frequency of using digital devices outside of school for browsing the Internet for fun videos (e.g. on YouTube);
+3. `dl1`: frequency of using digital devices for downloading music, films, or games;
+4. `dl2`: frequency of using digital devices for downloading new apps on a smartphone or tablet;
+5. `isc`: frequency of using digital devices for browsing the Internet for preparing an essay or a presentation;
+6. `ils`: frequency of using digital devices for browsing the Internet to follow up on class lessons, e.g. to clarify an explanation;
+7. `hwk`: frequency of using digital devices for doing homework.
+
+## Small task
+For educational purposes, try to adapt the small snippets of code I presented on the first day, and run a factor analysis on this data assuming that the items load up on 2 factors: `vid`, `dl1` and `dl2` go together in one factor, and `isc`, `ils` and `hwk` go together in the other. You can disregard the clustering in the data for now. Please remember to do listwise deletion on the data prior to running the analysis.
+
+You can fill in the code in the empty code chunk from below--when you're ready simply run the code.
+
+```{r mfa-naive-2-factor}
+
+```
+
+What does the output tell you, particularly from the perspective of model fit?
+
+## Single-factor model
+A model might fit the data reasonably well and yet still not produce correct standard errors. In addition to this, we might justifiably be interested in investigating differences in the measurement structure across schools, which means we'd need a multilevel specification.
+
+Let's start by being agnostic about the dimensionality of the concept, as we possibly would in a new research project where we don't have a strong body of theory to guide us in choosing the appropriate number of dimensions.
+
+```{r mfa-multilevel-1-factor, cache=TRUE}
+pisaDF <- pisaDF %>% 
+  na.omit()
+
+model1 <- '
+           level: 1
+             internet =~ vid + dl1 + dl2 + isc + ils + hwk
+        
+           level: 2
+             internet =~ vid + dl1 + dl2 + isc + ils + hwk '
+
+fit1 <- sem(model1, 
+            data = pisaDF, 
+            cluster = "schoolid", 
+            estimator = "MLR", 
+            std.lv = TRUE)
+summary(fit1, 
+        fit.measures = TRUE)
+```
+
+You're seeing a few problematic warning messages (though these don't appear in the **HTML** version of the file). First, you're being told that in some clusters a few of the indicators have no variance. This means that in a few schools all students gave the same answer on some of these survey questions. This is not a fatal error, and by chance these things could reasonably happen (particularly in small clusters). However, if you get a lot of these warnings you should be concerned. Either there was a problem with recoding the data, or perhaps there simply isn't much "within" variance in the data to begin with. The latter would be a reason for not trying a multilevel approach.
+
+The second warning, though, is something altogether more concerning. You're being told that a few of the estimated variances are negative, which is not logically possible (you can see those variances at the bottom of the output). These are known as Heywood cases, and they can signal a problem with the specification of the model--in a way, that perhaps a 1-factor model does not work well for the data.^[You can read more about Heywood cases here ([http://staskolenikov.net/papers/heywood-12.pdf](http://staskolenikov.net/papers/heywood-12.pdf)).]
+
+## Two-factor model
+
+```{r mfa-multilevel-2-factor, cache=TRUE}
+model2 <- '
+           level: 1
+             funw =~ vid + dl1 + dl2
+             schw =~ isc + ils + hwk
+        
+           level: 2
+             funb =~ vid + dl1 + dl2
+             schb =~ isc + ils + hwk '
+
+fit2 <- sem(model2, 
+            data = pisaDF, 
+            cluster = "schoolid", 
+            estimator = "MLR",
+            std.lv = TRUE)
+summary(fit2, 
+        fit.measures = TRUE)
+```
+
+It's natural that you still get the warnings about lack of variance; after all, we haven't recoded the data in any way. However, one bit of good news is that we don't get the warning about negative variances anymore. Even if only based on this I would tend to choose the 2-factor solution over the 1-factor one. However, let's see what would happen if we compared the fit of the two models.
+
+```{r mfa-check-fit-1}
+anova(fit1, fit2)
+```
+
+You can see a significant improvement in fit in the 2-factor solution, which is why we'll continue with it.
+
+## Alterations to the model
+However, we see a very high correlation between the two between-level factors. A value this high is a good indication that at the between-level, perhaps a 1-factor solution is better, whereas at the within-school level a 2-factor solution is more appropriate.
+
+```{r mfa-different-structure, cache=TRUE}
+model3 <- '
+           level: 1
+             funw =~ vid + dl1 + dl2
+             schw =~ isc + ils + hwk
+        
+           level: 2
+             funschb =~ vid + dl1 + dl2 + isc + ils + hwk '
+
+fit3 <- sem(model3, 
+            data = pisaDF, 
+            cluster = "schoolid", 
+            estimator = "MLR",
+            std.lv = TRUE)
+summary(fit3, 
+        fit.measures = TRUE)
+```
+
+What could be the interpretation for this? One way of looking at it is that for students we can differentiate between usage for devices for fun or for work. However, between schools we can't: schools where use for fun is high also tend to be places where use for work is high. Conversely, schools where there's low use of digital devices for work also see low use for fun. The most likely reason for this is sorting based on wealth (although in order to test this we would have to employ a full multilevel structural regression model!). Schools in wealthier areas get students who use more digital devices for all purposes, compared to poorer schools, which see low use across the board (fun *and* work).
+
+# References
+<div id="refs"></div>

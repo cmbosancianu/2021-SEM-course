@@ -1,0 +1,36 @@
+\documentclass{standalone}
+\usepackage{tikz, tikz-cd}
+\usetikzlibrary{shapes, decorations.markings}
+\begin{document}
+
+\begin{tikzpicture}[scale=0.9]
+	% Within part of the graph
+	\node[draw] (A) at (0,0) {$X$ };
+	\node[draw] (B) at (2.5,2) {$Y_1$};
+	\node[draw] (C) at (5,0) {$Y_2$};
+	\draw[black,fill] (2.15,1.75) circle [radius=0.8mm] ;
+	\draw [->, very thin,>=latex] (A)--(C.west) node [midway, below] {\tiny$\beta_{3}$};
+	\draw [->, very thin,>=latex] (B)--(C.west) node [midway, above] {\tiny$\beta_{2}$};
+	\draw [->, very thin,>=latex] (A)--(B) node [midway, above] {\tiny$\beta_{1}$};
+	\node[draw, circle, inner sep=1pt] (D1) at (3.5,3) {$D_1$};
+	\node[draw, circle, inner sep=1pt] (D2) at (6,1) {$D_2$};
+	\draw[<->, very thin,>=latex] (D1) to [out=70,in=110,looseness=7] (D1);
+	\draw[<->, very thin,>=latex] (D2) to [out=70,in=110,looseness=7] (D2);
+	\draw [->, very thin, >=latex] (D1)--(B.north east) node [midway, left] {\tiny 1};
+	\draw [->, very thin, >=latex] (D2)--(C.north east) node [midway, left] {\tiny 1};
+	\draw[black,fill] (4.63,0) circle [radius=0.8mm] ;
+	\draw[-, dashed, very thick] (-4,-1)--(7,-1);
+	\node[draw=none, font=\bfseries] at (-2.5,0-0.5) {Within};
+	\node[draw=none, font=\bfseries] at (-2.5,0-1.5) {Between};
+	% Between part of the graph
+	\node[draw, circle] (G) at (4,-3) {$Y_1$};
+	\node[draw, circle] (H) at (4,-5) {$Y_2$};
+	\draw [<->, very thin, bend left=15,>=latex] [out=85](G) to [in=95](H);
+	\draw[<->, very thin,>=latex] (G) to [out=70,in=110,looseness=7] (G);
+	\draw[<->, very thin,>=latex] (H) to [out=70,in=110,looseness=7] (H);
+	\node[draw] (L) at (0,-4) {$Z$};
+	\draw [->, very thin, >=latex] (L)--(G.west);
+	\draw [->, very thin, >=latex] (L)--(H.west);
+\end{tikzpicture}
+
+\end{document}

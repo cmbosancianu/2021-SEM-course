@@ -1,0 +1,862 @@
+% Taken from: https://mikedewar.wordpress.com/2009/02/25/latex-beamer-python-beauty/
+\documentclass[12pt,english,pdf,xcolor=dvipsnames,aspectratio=169]{beamer}
+\usetheme{default}
+\beamertemplatenavigationsymbolsempty
+\definecolor{fore}{RGB}{51,51,51}
+\definecolor{back}{RGB}{255,255,255}
+\definecolor{title}{RGB}{255,0,90}
+\setbeamercolor{titlelike}{fg=title}
+\setbeamercolor{normal text}{fg=fore,bg=back}
+\usepackage[T1]{fontenc}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage{multirow}
+\usepackage{mathpazo}
+\usepackage{inputenc}
+\usepackage{parskip}
+\setcounter{secnumdepth}{3}
+\setcounter{tocdepth}{3}
+\usepackage{hyperref}
+\hypersetup{pdfauthor={Constantin Manuel Bosancianu},
+pdftitle={Structural Equation Modeling},
+pdfsubject={Day 2: Full Structural Regression Models},
+pdfkeywords={Bamberg, workshop, SES, slides, 2021}}
+\usepackage{babel}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.10}
+\usepgfplotslibrary{fillbetween}
+% Defines a checkmark
+\def\checkmark{\tikz\fill[scale=0.4,color=title](0,.35) -- (.25,0) -- (1,.7) -- (.25,.15) -- cycle;}
+\setbeamertemplate{itemize items}{\checkmark}
+% For table captions in Beamer
+\usepackage{caption}
+\captionsetup[figure]{labelfont={color=title}, labelformat=empty}
+\captionsetup[table]{labelfont={color=title}, labelformat=empty}
+% Color of enumerate items
+\setbeamercolor{enumerate item}{fg=title}
+\usepackage{tikz, tikz-cd, animate}
+\usetikzlibrary{shapes,backgrounds,trees,arrows,shapes.misc}
+\usetikzlibrary{decorations.pathreplacing, decorations.markings}
+\usepackage{pgfplotstable}
+\usepackage{wrapfig}
+\usepackage{booktabs}
+\usepackage{dcolumn}
+\usepackage{amsmath}
+\newcommand{\ind}{\perp\!\!\!\!\perp}
+\usepackage[sectionbib]{apacite}
+\renewcommand{\bibliographytypesize}{\footnotesize}
+% Set the design of the footer
+\makeatletter
+\setbeamertemplate{title page}[default][left]
+\@addtoreset{subfigure}{figure}
+\setbeamercolor{author in head/foot}{fg=white, bg=fore}
+\setbeamercolor{date in head/foot}{fg=white, bg=fore}
+\setbeamercolor{institute in head/foot}{fg=white, bg=fore}
+\setbeamertemplate{footline}
+{
+  \leavevmode%
+  \hbox{%
+  \begin{beamercolorbox}[wd=.3333333\paperwidth,ht=2.25ex,dp=1ex,center]{author in head/foot}%
+    \usebeamerfont{author in head/foot}\insertauthor
+  \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=.3333333\paperwidth,ht=2.25ex,dp=1ex,center]{institute in head/foot}%
+    \usebeamerfont{institute in head/foot}Bamberg
+  \end{beamercolorbox}%
+  \begin{beamercolorbox}[wd=.3333333\paperwidth,ht=2.25ex,dp=1ex,right]{date in head/foot}%
+    \usebeamerfont{date in head/foot}\insertshortdate{}\hspace*{2em}
+    \insertframenumber{} / \inserttotalframenumber\hspace*{2ex}
+  \end{beamercolorbox}}%
+  \vskip0pt%
+}
+\makeatother
+\title{Structural Equation Modeling with \textsf{R} and \textsf{lavaan}}
+\subtitle{Day 2: Full Structural Regression Models}
+\author{Constantin Manuel Bosancianu}
+\institute{WZB Berlin Social Science Center \\ \textit{Institutions and Political Inequality}\\\href{mailto:manuel.bosancianu@gmail.com}{manuel.bosancianu@gmail.com}}
+\date{September 21, 2021}
+\begin{document}
+\maketitle
+
+% PREAMBLE %
+\section{Preamble}
+\begin{frame}
+  \frametitle{Today's plan}
+<<r setup, include = FALSE, warning=FALSE, message=FALSE, comment=NA, results='hide'>>=
+# Setup chunk
+knitr::opts_chunk$set(echo = FALSE,
+                      error = FALSE,
+                      warning = FALSE,
+                      message = FALSE,
+                      comment = NA,
+                      eval = TRUE)
+
+check.packages <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg))
+    install.packages(new.pkg, dependencies = TRUE,
+                     repos = "https://cran.rstudio.com")
+  sapply(pkg, require, character.only = TRUE)
+}
+
+pkgList <- c("tidyverse","scales","texreg","broom",
+             "arm","kableExtra","lavaan","psych","semPlot",
+             "semTools","readstata13")
+check.packages(pkgList)
+
+# Logical switch for generating output
+generateFigs <- FALSE
+@
+
+  Less theory than yesterday, to allow for more time in the lab session to explore \textbf{lavaan}:
+
+  \begin{itemize}
+  \item basic options for estimation of path models\pause
+  \item assessing model fit\pause
+  \item full structural regression models
+  \end{itemize}\pause\bigskip
+
+  Best practices in analyzing and presenting results from these models to an audience.
+
+\end{frame}
+
+
+\section{SEM estimation}
+\begin{frame}
+\begin{center}
+    \Huge Estimation
+\end{center}
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Strategies of estimation}
+  Two broad classes for path models:
+
+  \begin{itemize}
+  \item \textbf{single-equation methods}: focus on each equation in the system at a time\pause
+  \item \textbf{simultaneous methods}: estimate all parameters in one go
+  \end{itemize}\pause\bigskip
+
+  Advantages and disadvantages to each, though the \textbf{simultaneous} approach tends to produce estimates with lower variance (is more \textit{efficient}).
+  
+\end{frame}
+
+
+\subsection{Single-equation methods}
+\begin{frame}
+  \frametitle{Single-equation methods (I)}
+  Estimate one-by-one an equation for each endogenous variable in the \textit{recursive} model using OLS.\bigskip
+
+  Advantages:
+
+  \begin{itemize}
+  \item less sensitive to specification error, as it ``compartmentalizes'' model in isolated parts\pause
+  \item don't require an identified model, or assume multivariate normality
+  \end{itemize}\pause\bigskip
+
+  Main disadvantage: they don't provide a measure of \textit{global} model fit.
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Single-equation methods (II)}
+
+  \begin{minipage}{0.45\textwidth}
+  \begin{figure}[]
+  \centering
+  \includegraphics[width=\textwidth]{../03-graphs/01-12b.pdf}
+  \caption{Standard regression}
+\end{figure}
+  \end{minipage}
+\begin{minipage}{0.50\textwidth}
+  Standard OLS no longer works for \textit{non-recursive} specifications (regression residuals are no longer independent of predictors).\pause\bigskip
+
+  \textbf{2-stage least squares} (2SLS) (something also partly attributed to Sewall Wright!):
+
+  \begin{itemize}
+  \item regress ``problematic'' variable ($Y_1$) on instrument ($X_1$), and save predicted values $\hat{Y}_1$\pause
+  \item regress $Y_2$ on predicted values $\hat{Y}_1$
+  \end{itemize}
+\end{minipage}
+  
+\end{frame}
+
+
+\subsection{Simultaneous methods}
+
+\begin{frame}
+  \frametitle{Simultaneous methods}
+  All free parameters are estimated in one go $\Rightarrow$ the model must be correctly specified.\pause\bigskip
+
+  If not, we get \textit{propagation of specification error}: bias in one parameter estimate affects the other estimates as well.\pause\bigskip
+
+  The most common such method is \textbf{maximum likelihood}, which comes in a variety of ``flavors''; great advantage in that it works for latent variables as well.
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Maximum Likelihood (I)}
+  Widespread usage in statistics. \textbf{Principle}: find estimates that maximize the probability of seeing the data (the covariances) in our sample.\pause\bigskip
+
+  A \textit{fit function} is minimized in an iterative process, until it produces the smallest difference between predicted covariances (under the model) and observed ones (in the data).\pause\bigskip
+
+  This is not a simple calculation like with OLS, but a iterative procedure: update coefficients $\Rightarrow$ check difference $\Rightarrow$ update $\Rightarrow$ check again \dots \pause\bigskip
+
+  Problem if there are \textit{multiple optima}: multiple sets of estimates that produce the same degree of fit between model and data.
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Maximum Likelihood (II)}
+
+\textit{Convergence} of the algorithm is reached when the change in fit is extremely small.
+
+\begin{figure}
+\centering
+\begin{tikzpicture}[scale=0.8]
+\begin{axis} [%
+yticklabels={,,,}
+]
+    \addplot[domain=-1:2, title, ultra thick] {2*x - x^2};
+\end{axis}
+\end{tikzpicture}
+\end{figure}
+
+\end{frame}
+
+
+% Otherwise footnote and footnote rule appear already from the beginning of the slide.
+\bgroup
+\let\oldfootnoterule\footnoterule
+\def\footnoterule{\only<2->\oldfootnoterule}
+\begin{frame}
+  \frametitle{Maximum Likelihood (III)}
+
+  Setting the first derivative to the likelihood function to 0 gives you the coefficients.
+
+\begin{figure}
+\centering
+\begin{tikzpicture}[scale=0.7]
+\begin{axis} [%
+  yticklabels={,,,},
+  xlabel = Coefficient,
+  ylabel = Likelihood
+]
+    \addplot[domain=-1:2, title, ultra thick] {2*x - x^2};
+\draw [very thick, title, dashed] (axis cs:0,1) -- (axis cs:2,1);
+\draw [thick, title, dashed, draw opacity=0.5] (axis cs:-1,-1) -- (axis cs:0.9,1.2);
+\draw [thick, title, dashed, draw opacity=0.5] (axis cs:2,0.5) -- (axis cs:0.8,1.2);
+\end{axis}
+\end{tikzpicture}
+\end{figure}\pause
+
+The second derivative to the likelihood function is used to determine if we found the minimum or maximum,\only<2>{\footnote{If it's negative, we found the maximum; if it's positive, it's a minimum.}} as well as to compute the standard errors.
+
+\end{frame}
+\egroup
+
+
+\begin{frame}
+  \frametitle{Robust ML}
+  \textbf{Robust} (MLR): for continuous endogenous variables with non-normal distributions. Data is analyzed with standard ML, but SEs and model test statistics are adjusted for non-normality.\pause\bigskip
+
+  An alternative is the \textbf{Bollen--Stine bootstrap}:
+
+  \begin{itemize}
+  \item default ML is used repeatedly on samples drawn with replacement from the working sample\pause
+  \item $\beta$s and SEs are obtained from the empirical sampling distributions of the estimates\pause
+  \item the $p$ values for estimates and model fit tests are also based on these replications
+  \end{itemize}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Categorical outcomes}
+  With at least 6--7 categories, and distributions that approximate a Gaussian one, ML should provide reasonably accurate estimates \cite{rhemtulla_when_2012}.\pause\bigskip
+
+  Alternatives for variables with fewer categories:
+
+  \begin{enumerate}
+  \item \textit{weighted least squares} (WLS): also incorporates variance of observations in estimation
+  \item \textit{robust WLS}\pause
+  \item \textit{full-information ML} based on numerical integration---complex in terms of calculations (read: \textbf{slow}), but implemented in software
+  \end{enumerate}
+
+\end{frame}
+
+
+
+
+\section{Model fit}
+\begin{frame}
+\begin{center}
+    \Huge Model fit
+\end{center}
+\end{frame}
+
+\subsection{Local fit}
+\begin{frame}
+  \frametitle{Local fit (I)}
+  The goal is to understand for small subsets of a larger model, whether predicted covariances (under the model) fit observed covariances.\bigskip
+
+  If not, where are the biggest gaps, and what can we learn from these patterns?\pause\bigskip
+
+  \citeA{roth_life_1989} test an explanatory model of students' susceptibility to illness based on exercise, psychological hardiness, fitness, and stress.
+\end{frame}  
+
+
+\begin{frame}
+  \frametitle{Explaining illness}
+
+\begin{minipage}{0.5\textwidth}
+ \begin{figure}
+   \centering
+   \includegraphics[scale=0.9]{../03-graphs/02-01.pdf}
+ \end{figure}  
+\end{minipage}
+\begin{minipage}{0.45\textwidth}
+  Exercise and psychological hardiness display no direct effect on illness $\Rightarrow$ full mediation.\pause\bigskip
+
+  The goal is to understand how the multiple components of the model fit the data, under the assumption of a correct model specification.\pause\bigskip
+
+  Once we control for hardiness, exercise and stress should be independent of each other. 4 more such conditional independences can be evaluated.
+\end{minipage}
+
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Local fit (II)}
+  Any absolute discrepancy between predicted and observed correlations larger than 0.10 is a sign of a poor local fit.\pause\bigskip
+
+<<r load-roth-data>>=
+# Input the correlations in lower diagnonal form
+rothLower.cor <- '
+                  1.00
+                  -.03 1.00
+                   .39  .07 1.00
+                  -.05 -.23 -.13 1.00
+                  -.08 -.16 -.29  .34 1.00 '
+# name the variables and convert to full correlation matrix
+rothFull.cor <- getCov(rothLower.cor, names = c("exercise","hardy","fitness","stress","illness"))
+# add the standard deviations and convert to covariances
+rothFull.cov <- cor2cov(rho = rothFull.cor, sigma = c(66.50,38.00,18.40,33.50,62.48))
+@ 
+
+\begin{table}[ht]
+  \centering
+  \scriptsize
+  \begin{tabular}{l l D{.}{.}{3}}
+   \toprule[0.2em]
+   Independence  & Controlling for  & \multicolumn{1}{c}{Partial correlation}  \\
+   \midrule
+   Exercise $\ind$ Stress & Hardiness  & -0.058  \\
+   Exercise $\ind$ Illness & Fitness \& Stress  & 0.039  \\
+   Hardiness $\ind$ Fitness & Exercise  & 0.089  \\
+   Hardiness $\ind$ Illness & Fitness \& Stress  & -0.081  \\
+   Fitness $\ind$ Stress & Exercise \& Hardiness & -0.103 \\
+   \bottomrule[0.2em]
+  \end{tabular}
+\end{table}\pause\bigskip
+
+It's possible we need to specify a causal link between fitness and stress (though the estimate is at the border).
+
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{After fit assessment}
+  \textbf{Estimation}: \citeA{kline_principles_2015} has an example for a \textit{single-equation} approach (pp.~241--247), but here we jump directly to the \textit{simultaneous} approach.\pause\bigskip
+
+  The results presented are based on the default ML algorithm in \textsf{lavaan}, fitted to the covariance matrix of the model.\pause\bigskip
+
+  This also produces the measures of global fit we discuss in the next subsection, though these are not reported here.
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Results simultaneous approach (I)}
+
+<<r estimate-roth-model, eval=FALSE>>=
+# specify path model
+roth.model <- '
+ fitness ~ a*exercise
+ stress ~ c*hardy
+ illness ~ b*fitness + d*stress
+ # indirect effects
+ ab := a*b
+ cd := c*d'
+# The association between exercise and psychological hardiness is
+# estimated by default in this specification.
+
+model.1 <- sem(roth.model,
+               sample.cov = rothFull.cov,
+               sample.nobs = 373,
+               fixed.x = FALSE,
+               sample.cov.rescale = FALSE)
+summary(model.1,
+        fit.measures = TRUE,
+        standardized = TRUE,
+        rsquare = TRUE)
+@
+
+\begin{figure}
+  \centering
+  \includegraphics[scale=0.9]{../03-graphs/02-02.pdf}
+  \caption{Unstandardized estimates (SEs not depicted)}
+\end{figure}  
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Results simultaneous approach (II)}
+  We can also define in \textsf{lavaan}, and estimate, a series of indirect effects:
+
+  \begin{itemize}
+  \item Exercise $\rightarrow$ Illness: $-0.092^{***}$ (0.021) \pause
+  \item Hardiness $\rightarrow$ Illness: $-0.116^{***}$ (0.031)
+  \end{itemize}\pause
+  
+  If doing this by hand (multiplying direct effects), there is a special approximate formula for the SE of the indirect effect \cite{sobel_asymptotic_1982}:
+
+  \begin{equation}
+    \centering
+    SE_{ab} = \sqrt{b^2SE_a^2 + a^2SE_b^2}
+  \end{equation}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Residuals (I)}
+  \textsf{lavaan} also produces \textbf{correlation} (or covariance) \textbf{residuals}: difference between observed and predicted correlations (covariances).\pause\bigskip
+
+<<r produce-residuals, eval=FALSE>>=
+lavResiduals(model.1, type = "cor")
+@
+
+\begin{table}
+  \centering
+  \scriptsize
+  \begin{tabular}{l c c c c c}
+    \toprule[0.2em]
+   & Fitness & Stress & Illness & Exercise & Hardiness \\
+    \midrule
+    Fitness & 0.000 & & & & \\
+    Stress & -0.133 & 0.000 & & & \\
+    Illness & -0.038 & 0.030 & 0.000 & & \\
+    Exercise & 0.000 & -0.057 & 0.016 & 0.000 & \\
+    Hardiness & 0.082 & 0.000 & -0.091 & 0.000 & 0.000 \\
+    \bottomrule[0.2em]
+  \end{tabular}
+  \caption{Correlation residuals}
+\end{table}\pause
+
+As before, absolute values that are larger than 0.10 are problematic.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Residuals (II)}
+  We can also obtain \textbf{standardized residuals}: a ratio or covariance residuals and their SEs.\pause\bigskip
+
+  These approximate a $z$ distribution, allowing inference to the population.\pause\bigskip
+
+  \begin{table}
+  \centering
+  \scriptsize
+  \begin{tabular}{l c c c c c}
+    \toprule[0.2em]
+   & Fitness & Stress & Illness & Exercise & Hardiness \\
+    \midrule
+    Fitness & 0.000 & & & & \\
+    Stress & -2.548 & 0.000 & & & \\
+    Illness & -2.573 & 2.573 & 0.000 & & \\
+    Exercise & 0.000 & -1.128 & 0.358 & 0.000 & \\
+    Hardiness & 1.708 & 0.000 & -1.921 & 0.000 & 0.000 \\
+    \bottomrule[0.2em]
+  \end{tabular}
+  \caption{Standardized residuals}
+\end{table}
+  
+\end{frame}
+
+
+\subsection{Global fit}
+\begin{frame}
+  \frametitle{Global fit indices}
+  Single-value summaries of the fit of the \textit{entire} model specification to the data.\pause\bigskip
+  
+  We cover 2 families: (1) model test statistics, and (2) approximate fit indices.\pause\bigskip
+
+  The usual disclaimers apply as for any single-number summary of fit:
+
+  \begin{itemize}
+  \item even a good value can hide poor fit in parts of the model\pause
+  \item hard to identify where the problem is in the case of poor fit\pause
+  \item good fit is not synonymous with theoretical soundness 
+  \end{itemize}
+
+\end{frame}
+
+
+\subsubsection{Model test statistics}
+\begin{frame}
+  \frametitle{Model test statistics}
+  Based on the model $\chi^2$ and test the \textbf{exact fit}: is the model-predicted covariance matrix considerably \textit{different} than the sample covariance matrix?\pause\bigskip
+
+  This is an \textbf{accept-support test}: we \textit{don't} want to reject the null of no difference in this case!\pause\bigskip
+
+  If we do reject $H_0$ then our model does not do a good job at capturing reality.\pause\bigskip
+
+  Never enough by itself; most valuable when used in conjunction with local fit testing.
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Model $\chi^2$}
+
+  \begin{equation}
+    \centering
+    \chi^2 = (N-1)*F_{ML}
+  \end{equation}
+
+  $N$ is sample size, and $F_{ML}$ is the fit function minimized in ML estimation.\footnote{Other software implements this as $N*F_{ML}$, but asymptotically they're the same thing.}\pause\bigskip
+
+  Follows a $\chi^2$ distribution with degrees of freedom $df_M$.\pause\bigskip
+
+  If $\chi^2=0$, then $F_{ML}=0$, so there is no discrepancy between model and sample covariances. Higher values of $\chi^2$ denote worse fit (a ``badness-of-fit'' indicator).
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{$\chi^2$ sensitivity}
+  Easy to reduce by freeing parameters. Other influences on value:
+
+  \begin{enumerate}
+  \item \textbf{non-normality} (difficult to predict direction of bias)\pause
+  \item \textbf{correlation magnitude}: allows for larger discrepancies between covariance matrices\pause
+  \item \textbf{unique variance} in indicators\pause
+  \item \textbf{sample size}: larger samples tend to produce higher $\chi^2$ values
+  \end{enumerate}\pause\bigskip
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{$\chi^2$ variants}
+  Various proposals for adjustments to $\chi^2$.\bigskip
+
+  With robust ML (MLR), you can obtain a \textbf{Satorra--Bentler scaled $\chi^2$}, which applies a scaling correction factor (the average kurtosis in the data) to the model $\chi^2$.
+
+  \begin{equation}
+    \centering
+    \chi_{SB}^2 = \frac{\chi_M^2}{c}
+  \end{equation}\pause\bigskip
+
+  There is also a \textbf{Satorra--Bentler adjusted $\chi^2$}, though it's less used than the scaled version.
+  
+\end{frame}
+
+\subsubsection{Approximate fit indices}
+\begin{frame}
+  \frametitle{Approximate fit indices}
+  They do not rely on a significance test, but rather offer a numerical continuous summary of the model--data fit. Typically come standardized between 0--1.\pause\bigskip
+
+  Types:
+
+  \begin{itemize}
+  \item \textbf{absolute fit}: comparison of model-implied covariances and data covariances\pause
+  \item \textbf{incremental (relative, comparative) fit}: relative improvement over a baseline model\pause
+  \item \textbf{parsimony-adjusted}: incorporate a penalty for model complexity\pause
+  \item \textbf{predictive fit}: hypothetical fit in other samples from same population
+  \end{itemize}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{RMSEA (I)}
+  RMSEA = root mean squared error of approximation ($\hat{\varepsilon}$).
+
+  An absolute fit index that measures departure from close fit (it's a ``badness-of-fit'' indicator).\pause\bigskip
+
+  This limit of close fit is defined as
+
+  \begin{equation}
+    \centering
+    \hat{\Delta}_M = max(0, \chi_M^2 - df_M)
+  \end{equation}\pause
+
+  If $\hat{\Delta}_M=0$, there is no departure from close fit. Otherwise:
+
+  \begin{equation}
+    \centering
+    \hat{\varepsilon} = \sqrt{\frac{\hat{\Delta}_M}{df_M(N-1)}}
+  \end{equation}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{RMSEA (II)}
+  Typically, also gets reported with a 90\% CI: $[\hat{\varepsilon}_L, \hat{\varepsilon}_U]$.\pause\bigskip
+
+  Hard to put thresholds on this, but if the upper bound of CI intersects 0.10 caution is warranted.\pause\bigskip
+
+  Using the Satorra--Bentler scaled $\chi^2$ produces a more robust version of the RMSEA to departures from normality.
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{SRMR}
+  Standardized root mean squared residual: an absolute fit index where higher values denote poorer fit.\pause\bigskip
+
+  Computed as the squared root of the average squared covariance residual (in standardized format) $\Rightarrow$ mean absolute correlation residual.\pause\bigskip
+
+  Values greater than 0.10 indicate poor fit.
+
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{CFI}
+  The Bentler \textbf{comparative fit index} (CFI) is an incremental (relative) fit index: compares the proposed model to an independence (null) model.\pause\bigskip
+
+  It's therefore a ``goodness-of-fit'' measure.
+
+  \begin{equation}
+    \centering
+    CFI = 1 - \frac{\hat{\Delta}_M}{\hat{\Delta}_B}
+  \end{equation}
+
+  where for the baseline model $\hat{\Delta}_B = max(0, \chi_B^2 - df_B)$.\pause\bigskip
+
+  CFI of 0.90 would indicate model fit that is about 90\% better than the baseline model.
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Usage recommendations}
+  Report the model $\chi^2$ and its degrees of freedom and $p$ value. Irrespective of whether this test is passed or not, conduct local fit testing.\pause\bigskip
+
+  Report the matrix of correlation residuals, even if only in the appendix.\pause\bigskip
+
+  Report values from approximate fit indices as well (RMSEA, CFI, SRMR), but keep in mind that thresholds for them depend considerably on (1) sample size, (2) distributional assumptions, (3) degree of mis-specification, and (4) estimation method \cite{xia_RMSEA_2019}.
+
+\end{frame}
+
+
+\subsection{Comparing nested models}
+
+\begin{frame}
+  \frametitle{Nested models}
+  2 models are nested if one includes all the parameters of the other, plus at least one more. Example: one parameter is freed or constrained.\pause\bigskip
+
+  Variants:
+
+  \begin{itemize}
+  \item \textbf{model trimming}: start with a complex model and constrain parameters to 0---ideally, $\chi_M^2$ doesn't increase much\pause
+  \item \textbf{model building}: start with a simple model and free parameters---ideally, $\chi_M^2$ decreases considerably
+  \end{itemize}\pause\bigskip
+
+  Can be compared with the $\chi^2$ difference statistic, with $df$ the difference in the number of parameters between the two models.
+  
+\end{frame}
+
+
+\subsection{Comparing non-nested models}
+
+\begin{frame}
+  \frametitle{Non-nested models (I)}
+  Not all models are nested: as an example, freeing some parameters and constraining others in model B compared to A.\pause\bigskip
+
+  In these instances, the $\chi^2$ difference statistic no longer applies.\pause\bigskip
+
+  \textbf{Akaike Information Criterion} (AIC) allows for such comparisons:
+
+  \begin{equation}
+    \centering
+    AIC = \chi_M^2 + 2k
+  \end{equation}
+
+  where $k$ is the number of estimated (free) parameters.\pause\bigskip
+
+  Models need to be estimated on the same sample to compare their AICs.
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Non-nested models (II)}
+  The Bayesian Information Criterion (BIC), however, does incorporate sample size differences:
+
+  \begin{equation}
+    \centering
+    BIC = \chi_M^2 + k*ln(N)
+  \end{equation}
+
+  where $k$ is the number of free parameters and $N$ is the sample size.\pause\bigskip
+
+  BIC should be used carefully, as with increasing sample size $\chi_M^2$ also may increase even though model fit wouldn't change.
+  
+\end{frame}
+
+
+\section{Structural regression models}
+\begin{frame}
+\begin{center}
+    \Huge Structural Regression Models
+\end{center}
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{SR models (I)}
+  A \textbf{structural regression} model combines a \textit{measurement} part with a \textit{structural} one.\pause\bigskip
+
+  \begin{figure}
+    \centering
+    \includegraphics[scale=0.9]{../03-graphs/02-03.pdf}
+    \caption{Partially latent SR model}
+  \end{figure}
+  
+\end{frame}
+
+
+
+\begin{frame}
+  \frametitle{SR models (II)}
+
+  \begin{figure}
+    \centering
+    \includegraphics{../03-graphs/02-04.pdf}
+    \caption{Fully latent SR model}
+  \end{figure}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Identification}
+  Identification is done separately for the measurement and structural part of the model.\pause\bigskip
+
+  The same principles from yesterday's discussion of path models and factor analysis models apply here.\pause\bigskip
+
+  Both parts have to be identified (\textbf{two-step identification rule}).
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{2-step modeling (I)}
+  \textbf{First}, specify a fully latent SR model as a CFA measurement model, to determine whether it fits the data.\pause\bigskip
+
+  \begin{figure}
+    \centering
+    \includegraphics{../03-graphs/02-05.pdf}
+    \caption{Re-specification of SR model}
+  \end{figure}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{2-step modeling (II)}
+  \textbf{Second}, convert covariances in the CFA measurement model into causal paths between latents, and check model fit changes.\pause\bigskip
+
+  The hope is that the switch from 1st to 2nd stage does not impact factor loading considerably.\pause\bigskip
+
+  A 4-step approach was also proposed, where 1st stage is an EFA measurement model, which can then be reduced to a CFA one in the 2nd stage.
+  
+\end{frame}
+
+
+\section{Best practices in SEM}
+\begin{frame}
+\begin{center}
+    \Huge Best practices
+\end{center}
+\end{frame}
+
+\begin{frame}
+  \frametitle{A few resources}
+  All of these are currently uploaded on Moodle:
+
+  \begin{enumerate}
+  \item \citeA{hoyle_reporting_2013} offer a checklist of points that should be discussed when reporting SEM results \cite<so do>[]{mueller_best_2008}\pause
+  \item \citeA{jackson_reporting_2009} offer reporting recommendations for CFA analyses\pause
+  \item \citeA{mueller_structural_2019} provide a handy list of recommendations for reviewers of manuscripts using SEM\pause
+  \item \citeA[ch.~16]{schumacker_beginner_2016} provide recommendations for modeling, as well as yet another checklist\pause
+  \item \citeA{thompson_ten_2000} lists the ``10 commandments'' of SEM
+  \end{enumerate}
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Selected suggestions: specification}
+  Try to have at least 3 indicators for each factor (even 2 can lead to problems of estimation).\pause\bigskip
+
+  Don't specify reciprocal causation unless theory really suggests this is the case.\pause\bigskip
+
+  Keep in mind the importance of \textbf{parsimony}.\pause\bigskip
+
+  It's fine to constrain parameters, like forcing equality or proportionality, but make sure to defend this theoretically.
+  
+\end{frame}
+
+
+\begin{frame}
+  \frametitle{Selected suggestions: estimation}
+  Don't rely on standard ML estimation for ordinal variables (6--7); go for full-information ML, or one of the least squares-based methods.\pause\bigskip
+
+  Don't choose the best model based only on global fit tests and standard thresholds; rather, use local fit assessment---examine correlation residuals' matrices.\pause\bigskip
+
+  For a fully latent SR model, don't do ``single-shot'' estimation. Instead:
+
+  \begin{enumerate}
+  \item ensure the measurement model is correctly specified\pause
+  \item after this, proceed to adding causal links between latents
+  \end{enumerate}
+  
+\end{frame}
+
+\begin{frame}
+  \frametitle{Selected suggestions: others}
+  Respecification is a common part of the modeling process, but it should include theoretical justification.\pause\bigskip
+
+  If reporting on mediation effects, decompose the total effect into direct and indirect ones, with accompanying SEs and significance tests.\pause\bigskip
+
+  Report the residual matrix (at a minimum in the appendix), and discuss it in the main text.\pause\bigskip
+
+  Report measures of model fit in the main text: model $\chi^2$ with $df$ and $p$ value, RMSEA with 90\% CI, CFI (or TLI), and the SRMR.
+  
+\end{frame}
+
+% FRAME
+\begin{frame}
+\begin{center}
+    \Huge Thank \textcolor{title}{you} for the kind attention!
+\end{center}
+\end{frame}
+
+% REFERENCES
+
+\begin{frame}[allowframebreaks]
+\frametitle{References}
+\bibliographystyle{apacite}
+\bibliography{Bibliography}
+\end{frame}
+
+\end{document}

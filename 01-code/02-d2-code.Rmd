@@ -1,0 +1,399 @@
+---
+title: "SEM workshop: Day 2 code"
+author: "Constantin Manuel Bosancianu"
+date: "`r format(Sys.time(), '%B %d, %Y | %H:%M:%S | %Z')`"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: false
+    code_folding: hide
+    highlight: pygments
+bibliography: ../04-slides/Bibliography.bib
+---
+
+# Introduction
+
+Welcome to day 2 of our SEM workshop! We continue from where we left off yesterday, by probing more into issues of model fit. We also venture today into testing full structural regression models, in preparation for tomorrow's session on multilevel SEM.
+
+The set-up of the code file is the same as yesterday, with chunks of code in between paragraphs of explanation. If you feel the need to, please add to the text your own observations--whatever helps you remember what an argument does in a function etc.
+
+As was the case yesterday, I will assume that you have a dedicated workshop folder, that in this folder you have a smaller set of subfolders called `01-code`, `02-data`, `03-graphs` and so on, and that this code file is placed in `01-code`. As long as you have this folder structure in place, the code file should work from beginning to end without errors.
+
+
+# Loading packages
+In this part of the code file I simply load the packages we're going to use, using the same function from yesterday.
+
+```{r setup-packages, warning=FALSE, message=FALSE, comment=NA, results='hide'}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      error = FALSE,
+                      comment = NA,
+                      message = FALSE)
+
+check.packages <- function(pkg){
+    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+    if (length(new.pkg))
+        install.packages(new.pkg, dependencies = TRUE,
+                         repos = "https://cran.rstudio.com")
+    sapply(pkg, require, character.only = TRUE)
+}
+
+# The list of packages that should be checked.
+pkg.list <- c("tidyverse","scales","texreg","broom",
+              "kableExtra","lavaan","psych","semPlot",
+              "semTools","haven")
+check.packages(pkg.list)
+```
+
+
+# Model fit
+We spoke today about how to assess model fit, and I want us to go back to yesterday's example with political efficacy. I asked you repeatedly then to take my word that a model was poorly fitting, or was better fitting than another model. Now that we covered these earlier, I'd like us to go back to the factor analysis from yesterday and really assess model fit. Even though we will be speaking based on a CFA, the reasoning process and the evidence incorporated in a decision would be the same as in the case of a path model.
+
+To begin with, let's go through the same process of data loading and cleaning--all the steps we performed yesterday up to the point of running the single-factor CFA model we started with.
+
+```{r fa-read-data}
+anesDF <- read_dta("../02-data/03-ANES-pilot-1987.dta")
+
+# Also define a small custom cleaning function that will simplify the
+# recoding process downstream.
+spec_rec <- function(x) {
+  if_else(x %in% c(0,8,9), NA_real_, x)
+}
+```
+
+```{r fa-clean-data}
+anesDF <- anesDF %>% 
+  dplyr::select(V875267:V875272, V875216:V875222, V860595, V860596,
+                V860599, V860733, V860738, V860756, V860261, V860301,
+                V860309, V860448) %>% 
+  mutate_at(.vars = vars(V875267:V875222, V860738, V860261, V860301,
+                         V860309, V860448),
+            .funs = as.numeric) %>% 
+  mutate_at(.vars = vars(V875267:V875222),
+            .funs = spec_rec) %>% 
+  rename(a15a = V875216,
+         a15b = V875217,
+         a15c = V875218,
+         a15d = V875219,
+         a15e = V875220,
+         a15f = V875221,
+         a15g = V875222,
+         a38a = V875267,
+         a38b = V875268,
+         a38c = V875269,
+         a38d = V875270,
+         a38e = V875271,
+         a38f = V875272,
+         age = V860595,
+         married = V860596,
+         yrs_educ = V860599,
+         income_cat = V860733,
+         relig_attn = V860738,
+         white = V860756,
+         voted_86 = V860261,
+         pol_int = V860301,
+         contact = V860309,
+         increase_spend = V860448) %>% 
+  mutate_at(.vars = vars(married, yrs_educ, income_cat, relig_attn,
+                         white, voted_86, pol_int, contact, increase_spend),
+            .funs = zap_labels) %>% 
+  mutate(a15a = 6 - a15a,
+         a15c = 6 - a15c,
+         a15d = 6 - a15d,
+         a38a = 6 - a38a,
+         a38b = 6 - a38b,
+         a38d = 6 - a38d,
+         a38f = 6 - a38f,
+         married = case_when(married==1 ~ 1,
+                             married>=2 ~ 0,
+                             married==9 ~ NA_real_),
+         yrs_educ = if_else(yrs_educ==99, NA_real_, yrs_educ),
+         income_cat = if_else(income_cat==98, NA_real_, income_cat),
+         relig_attn = if_else(relig_attn==9, NA_real_, relig_attn),
+         relig_attn = 6 - relig_attn,
+         white = case_when(white==1 ~ 1,
+                           white>=2 ~ 0),
+         voted_86 = if_else(voted_86==5, 0, voted_86),
+         pol_int = if_else(pol_int %in% c(8,9), NA_real_, pol_int),
+         pol_int = 5 - pol_int,
+         contact = case_when(contact==8 ~ NA_real_,
+                             contact==1 ~ 1,
+                             contact==5 ~ 0),
+         increase_spend = if_else(increase_spend %in% c(0,8,9), NA_real_, increase_spend))
+
+# Select only the needed indicators for the factor analysis
+tempDF <- na.omit(anesDF[ ,c("a38a","a38b","a38c","a38d","a38e",
+                             "a38f","a15a","a15b","a15c","a15d",
+                             "a15e","a15f","a15g")])
+```
+
+## Initial model
+Let's focus a bit more on the measures of model fit presented in the output. First, you notice a few of the sections are missing, such as the robust CFI or the robust TLI and RMSEA.^[These are newly-proposed measures by @brosseau-liard_investigation_2012 and @brosseau-liard_adjusting_2014.] That's an unfortunate result of us needing to specify that our indicators are measured on ordinal scales. There simply is no current known way for population-consistent fit indices to be computed with adjusted test statistics, so with DWLS estimation we won't get these quantities. However, we do get a scaled version of the CFI, TLI, and RMSEA reported in the "Robust" column of the output.
+
+```{r cfa-single-factor, cache=TRUE}
+model1 <- ' efficacy =~ a38a + a38b + a38c + a38d + a38e + a38f + a15a + a15b + a15c + a15d + a15e + a15f + a15g '
+
+cfa1.fit <- cfa(model = model1,
+                data = tempDF,
+                ordered = TRUE,
+                std.lv = TRUE)
+summary(cfa1.fit, fit.measures = TRUE)
+```
+
+The first measure of fit we'll cover is the model $\chi^2$, which is called here the "Test statistic"--I'll refer from now on to the robust version of the index, and I would encourage you to report these quantities as well. The value is 1254.27, $df=65$, $p<.000$. If you remember from earlier, the $\chi^2$ test is an *exact fit* tests, so it tells us how well we approximate the population covariance matrix. The value we have here suggests we're not approximating it well at all. We're doing better than a baseline model ($\chi_{base}^2=2473.85$), but the baseline model is a particularly low bar to clear.
+
+In the area of relative fit indices, we have reported here the CFI and TLI. You can already see from the way they are situated in the output that they compare the model estimated here with a baseline model. We see here that the CFI tells us our model is about 50% better in terms of fit than the baseline model.^[The TLI is highly correlated with the CFI, so I focus only on the former measure here.]
+
+In terms of absolute fit indices, we have the RMSEA and the SRMR. Starting with the SRMR, this value represent a sort of average absolute correlation residual. We should be worried about values that are larger than 0.10, and here there is ample reason for worry with a value of 0.200. The RMSEA also suggests poor fit; we have a value of 0.229, and a 90% CI of [0.218, 0.240], and both of these surpass the generally-accepted value of 0.10.
+
+## Two-factor model
+Let's compare these values with the two-factor model we also saw yesterday.
+
+```{r cfa-two-factor, cache=TRUE}
+model2 <- ' internal =~ a38a + a38b + a38c + a38d + a38e + a38f
+            external =~ a15a + a15b + a15c + a15d + a15e + a15f + a15g '
+
+cfa2.fit <- cfa(model = model2,
+                data = tempDF,
+                ordered = TRUE,
+                std.lv = TRUE)
+summary(cfa2.fit, fit.measures = TRUE)
+```
+
+I'm going to go a little bit faster through these, but you can see considerable improvements in fit from a quick glance. The value of the model $\chi^2$ dropped to 344.11, though we are still far from *exact fit*. The CFI value tells us the model is about 88% better in terms of model fit than the baseline model. The average absolute correlation residual dropped down to 0.093; still a bit too close to 0.10 for comfort, but a clear improvement compared to before. The RMSEA as well is closer to 0.10, though the upper bound on the 90% confidence interval continues to be greater than that value. In other worse, we still have a way to go.
+
+## Model comparisons
+You'll also want to get a convenient summary table with model fit statistics for all the specifications you'll try, and this is where the `compareFit()` function from the **semTools** package will come in handy.
+
+```{r cfa-compare-models-1, results='asis'}
+fit.comp <- compareFit(cfa1.fit, cfa2.fit,
+                       nested = FALSE)
+fit.comp@fit %>%
+    dplyr::select(chisq.scaled, df.scaled, pvalue.scaled,
+                  rmsea.scaled, cfi.scaled, tli.scaled, srmr) %>%
+    kable(format = "html", digits = 2) %>%
+    kable_minimal() %>%
+    column_spec(1, bold = TRUE, border_right = TRUE)
+```
+
+You can see from the output that the two-factor model fits better than the 1-factor one. If these were nested models we could even run a $\chi^2$ difference test and hope to show this in a more rigorous way. However, these are not nested models, so that test wouldn't help us very much. We can, however, look at the AIC and BIC indices for these two models, as these can be used (under certain restrictions, which are met here) to compare non-nested models.
+
+To demonstrate this here I'll have to re-estimate the models while pretending that the indicators are measured on continuous scales, since computing the logLikelihood is only available for ML estimation.
+
+```{r cfa-compare-models-2, cache=TRUE}
+cfa1.fit <- cfa(model = model1,
+                data = tempDF,
+                std.lv = TRUE)
+
+cfa2.fit <- cfa(model = model2,
+                data = tempDF,
+                std.lv = TRUE)
+
+AIC(cfa1.fit)
+AIC(cfa2.fit)
+BIC(cfa1.fit)
+BIC(cfa2.fit)
+```
+
+Both indices are "badness-of-fit" indicators, so higher values point to worse fit. In both cases, the values on the indices point to the 2-factor model fitting the data better than the 1-factor one.
+
+
+
+# Structural Regression models
+Though we could try to continue with the same example with political efficacy from yesterday, I'd like to introduce a new data source for this section. With this model, my goal is to go once again through all the stages of building up a model like this: specifying it, checking local and global model fit, and interpreting coefficients.
+
+The data is sourced from @bollen_structural_1989, and refers to indicators of political democracy and economic development collected at 2 points in time, 1960 and 1965, for 75 democracies. The variables have very short names for convenience, but here is a quick codebook:
+
+1. `y1`: Freedom of the press, 1960
+2. `y2`: Freedom of political opposition, 1960
+3. `y3`: Fairness of elections, 1960
+4. `y4`: Effectiveness of elected legislature, 1960
+5. `y5`: Freedom of the press, 1965
+6. `y6`: Freedom of political opposition, 1965
+7. `y7`: Fairness of elections, 1965
+8. `y8`: Effectiveness of elected legislature, 1965
+9. `x1`: GNP per capita, 1960
+10. `x2`: Energy consumption per capita, 1960
+11. `x3`: Percentage of labor force in industry, 1960
+
+Bollen's initial exploration was to check whether economic development in 1960 predicts democratic level in 1965, even after accounting for level of democracy in 1960. The measurement part uses these two sets of indicators presented above to measure level of democracy and level of economic development.
+
+```{r sr-read-data, results='asis'}
+demoDF <- OpenMx::Bollen
+
+head(demoDF, 10) %>% 
+  kable(digits = 3,
+        row.names = FALSE,
+        caption = "Structure of Bollen's Political Democracy data set") %>% 
+  kable_minimal()
+```
+
+## Measurement model
+We start first with the measurement model, to ensure that we have good model fit there. Because of the 2 different time points at which indicators are measured, there is less flexibility than usual in how we would expect indicators to load on factors.
+
+Let's start off with the model below: it uses `x1`-`x3` to measure economic development, and `y1`-`y4` and `y5`-`y8` to assess level of democracy in 1960 and 1965. Since we expect the two latent factors for democracy to be correlated over time, we also specify a covariance there. We estimate the model using the same `sem()` function from yesterday.
+
+```{r sr-measurement-1}
+model.1 <- '# measurement model
+            ind60 =~ x1 + x2 + x3
+            demo60 =~ y1 + y2 + y3 + y4
+            demo65 =~ y5 + y6 + y7 + y8 
+            # Covariances
+            demo60 ~~ demo65 '
+
+fit.1 <- sem(model.1, 
+             data = demoDF,
+             std.lv = TRUE)
+summary(fit.1, fit.measures = TRUE)
+```
+
+We get the same output as before, with some encouraging results. The model $\chi^2$ value is 72.46, with 41 degrees of freedom, which means that we fail the **exact fit** test. However, the CFI is 0.953, which means our model is about 95% better in terms of model fit than the baseline model. RMSEA, however, is still at 0.101, with a 90% CI of $[0.061, 0.139]$, which indicates poor fit. The SRMR is fairly low, though--below the threshold of 0.10.
+
+Some encouraging sings, and some less than encouraging ones. But even if all the evidence had been pointing to good fit, we would still have to examine the matrix of residuals, to be able to spot if there is mis-fit hidden in sub-components of the model.
+
+```{r sr-residuals-1}
+lavResiduals(fit.1, type = "cor")$cov %>%
+    kable(digits = 3) %>%
+    kable_minimal() %>%
+    column_spec(1, bold = TRUE, border_right = TRUE)
+```
+
+Things look fairly OK in terms of residual correlations, though we do see a fairly high correlation between `y6` and `y2`, as well as between `y6` and `y3`. What could be the reason for this?
+
+```{r sr-measurement-2}
+model.2 <- '# measurement model
+            ind60 =~ x1 + x2 + x3
+            demo60 =~ y1 + y2 + y3 + y4
+            demo65 =~ y5 + y6 + y7 + y8 
+            # Covariances
+            demo60 ~~ demo65
+            y1 ~~ y5 
+            y2 ~~ y6
+            y3 ~~ y7
+            y4 ~~ y8 '
+
+fit.2 <- sem(model.2, 
+             data = demoDF,
+             std.lv = TRUE)
+summary(fit.2, fit.measures = TRUE)
+```
+
+We see improvements in virtually all measures of model fit. The RMSEA 90% confidence interval continues to intersect 0.10, however. Did this change in specification result in a noticeable change in the residuals, though?
+
+```{r sr-residuals-2}
+lavResiduals(fit.2, type = "cor")$cov %>%
+    kable(digits = 3) %>%
+    kable_minimal() %>%
+    column_spec(1, bold = TRUE, border_right = TRUE)
+```
+
+It certainly helped in eliminate some of the residual correlations above 0.1, though we still have the correlation between `y1` and `y3` at 0.107. Because Model 1 is actually *nested* in Model 2, we can even get a test of model fit.
+
+```{r sr-chi-square-test}
+anova(fit.1, fit.2)
+```
+
+One potentially useful function **lavaan** makes available brings up something called a "modification index". This essentially tells you which parameters, if freed, would produce a sizeable decrease in the model $\chi^2$ (which would mean an improvement in fit). We only ask it to display index values above 5 (as these would likely mean a statistically significant change in $\chi^2$).
+
+```{r sr-modification-index}
+modificationIndices(fit.2, standardized = FALSE, minimum.value = 5)
+```
+
+```{r test-practice}
+model.3 <- '# measurement model
+            ind60 =~ x1 + x2 + x3
+            demo60 =~ y1 + y2 + y3 + y4
+            demo65 =~ y5 + y6 + y7 + y8 
+            # Covariances
+            demo60 ~~ demo65
+            y1 ~~ y5 
+            y2 ~~ y6
+            y2 ~~ y4
+            y3 ~~ y7
+            y4 ~~ y8
+            y6 ~~ y8 '
+
+fit.3 <- sem(model.3, 
+             data = demoDF,
+             std.lv = TRUE)
+summary(fit.3, fit.measures = TRUE)
+anova(fit.2, fit.3)
+```
+
+
+
+## Structural model
+Now that we're reasonably satisfied with your measurement model, we can proceed with the structural one. If you remember from yesterday, in this part of the model syntax we define relationships among latent variables themselves. As with regular regression, we use formulas where the endogenous and exogenous variables are separated by `~`.
+
+```{r sr-structural-3}
+model.3 <- '# measurement model
+            ind60 =~ x1 + x2 + x3
+            demo60 =~ y1 + y2 + y3 + y4
+            demo65 =~ y5 + y6 + y7 + y8
+            # structural model
+            demo60 ~ ind60
+            demo65 ~ ind60 + demo60
+            # Covariances
+            y1 ~~ y5 
+            y2 ~~ y6
+            y3 ~~ y7
+            y4 ~~ y8 '
+
+fit.3 <- sem(model.3, 
+             data = demoDF,
+             std.lv = TRUE)
+summary(fit.3, fit.measures = TRUE)
+```
+
+Since in this version of the model we're defining a causal path from level of democracy in 1960 to the same indicator measured in 1965, we removed the covariance between those two latent factors. We now also get a section in the output designated **Regressions**, where you can see results from the structural part of the model. Things mostly confirm what you had reason to expect: economic development is associated with democracy ($\beta=0.501, SE=0.142$), while both democracy in 1960 and economic development in 1960 are associated with level of democracy in 1965.
+
+## Direct and indirect effects
+Just as we did yesterday, we can designate particular path coefficients with names, and use these names to compute custom quantities we are interested in. **lavaan** then reports estimates for these quantities in the output, which spares us some manual calculations, e.g. conducting a Sobel test by hand.
+
+```{r sr-structural-4}
+model.3 <- '# measurement model
+            ind60 =~ x1 + x2 + x3
+            demo60 =~ y1 + y2 + y3 + y4
+            demo65 =~ y5 + y6 + y7 + y8
+            # structural model
+            demo60 ~ a*ind60
+            demo65 ~ c*ind60 + b*demo60
+            # Covariances
+            y1 ~~ y5 
+            y2 ~~ y6
+            y3 ~~ y7
+            y4 ~~ y8 
+            # indirect effect
+            ab := a*b
+            # total effect
+            tot := c + a*b '
+
+fit.3 <- sem(model.3, 
+             data = demoDF,
+             std.lv = TRUE)
+summary(fit.3, fit.measures = TRUE)
+```
+
+We notice there certainly is a direct effect from economic development in 1960 to level of democracy in 1965, but there is also an indirect effect, which goes through level of democracy in 1960. How would you define this particular mediation configuration?
+
+Finally, we can get a decent-looking plot with the same `semPaths()` function we used yesterday.
+
+```{r sr-graph, fig.height=12, fig.width=12}
+semPaths(fit.3, what = "est",
+         edge.label.cex=0.9,
+         edge.color = "black",
+         layout = "tree")
+```
+
+# Data for practice
+Using smaller data sets definitely speeds up things in the lab, but it also doesn't convey some of the challenges encountered when working with more commonly-used data sources.^[Though it's worth keeping in mind that none of the data sets presented so far have been simulated. All are data sources collected at some point for research purposes.] Because of this, I've also supplied on the Moodle page for the class, a data set where you can try a simple structural regression model.
+
+The data comes from round 7 of the *World Values Surveys*, and includes information on a few psychological orientations, as well as socio-demographics and a few political attitudes. If you want to, you could easily try to set up a measurement model for Left--Right ideological placement, and see how education, age, and participation in protest activities relate to this latent trait. This is just a suggestion, of course; if it doesn't suit you, there are a few other latent traits that can be investigated with this data.
+
+The codebook for the data has also been uploaded on Moodle. Enjoy!
+
+
+# References
+<div id="refs"></div>
