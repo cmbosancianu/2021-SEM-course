@@ -1,5 +1,5 @@
 # Structural Equation Modeling with `R` and `lavaan`
- This repository contains class materials for a 2022 3-day course in Structural Equation Modeling at the University of Bamberg.
+ This repository contains class materials for a 2021 3-day course in Structural Equation Modeling at the University of Bamberg.
  
  ## Description
 
