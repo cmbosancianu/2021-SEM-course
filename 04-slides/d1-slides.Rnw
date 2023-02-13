@@ -1,5 +1,5 @@
 % Taken from: https://mikedewar.wordpress.com/2009/02/25/latex-beamer-python-beauty/
-\documentclass[12pt,english,pdf,xcolor=dvipsnames,aspectratio=169]{beamer}
+\documentclass[12pt,english,pdf,xcolor=dvipsnames,aspectratio=169,handout]{beamer}
 \usetheme{default}
 \beamertemplatenavigationsymbolsempty
 \definecolor{fore}{RGB}{51,51,51}
@@ -72,7 +72,7 @@ pdfkeywords={Bamberg, workshop, SES, slides, 2021}}
 \title{Structural Equation Modeling with \textsf{R} and \textsf{lavaan}}
 \subtitle{Day 1: Structural and Measurement Models}
 \author{Constantin Manuel Bosancianu}
-\institute{WZB Berlin Social Science Center \\ \textit{Institutions and Political Inequality}\\\href{mailto:manuel.bosancianu@gmail.com}{manuel.bosancianu@gmail.com}}
+\institute{WZB Berlin Social Science Center \\ \textit{Institutions and Political Inequality}\\\href{mailto:bosancianu@icloud.com}{bosancianu@icloud.com}}
 \date{September 20, 2021}
 \begin{document}
 \maketitle
